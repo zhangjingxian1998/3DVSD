@@ -11,13 +11,13 @@ python -m torch.distributed.launch \
         --train train \
         --valid val \
         --test test\
-        --batch_size 64 \
+        --batch_size 512 \
         --optim adamw \
         --warmup_ratio 0.05 \
         --lr 5e-5 \
-        --epochs 20 \
-        --num_workers 8 \
-        --max_text_length 100 \
+        --epochs 100 \
+        --num_workers 16 \
+        --max_text_length 40 \
         --clip_grad_norm 1.0 \
         --n_ground 4 \
         --backbone 'VL-T5/t5-base' \

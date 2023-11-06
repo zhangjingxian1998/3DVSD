@@ -26,18 +26,31 @@ class Model(nn.Module):
         if args.VL_pretrain:
             data = data['batch_entry_3d']
             data['centroid'] = data['centroid'].to(device)
+            data['boxes_center_3d'] = data['boxes_center_3d'].to(device)
+            data['mask_ture_class'] = data['mask_ture_class'].to(device) # 把这个mask_true_class 做成一个邻接矩阵, 只有两个对应类全都是total3d中能够检测的类, 才取他们对应的centroid, 否则, 取他们的boxes_center_3d
             class_name = data['class_name']
+            # 重新定义对3d坐标点进行取值 写for循环得了
+            new_data_center = torch.zeros(data['centroid'].shape[0],2,3).to(device)
+            for batch_id, mask_true in enumerate(torch.sum(data['mask_ture_class'], dim=-1)):
+                if mask_true == 2:
+                    new_data_center[batch_id,0] = data['centroid'][batch_id, 0]
+                    new_data_center[batch_id,1] = data['centroid'][batch_id, 1]
+                else:
+                    new_data_center[batch_id,0] = data['boxes_center_3d'][batch_id, 0]
+                    new_data_center[batch_id,1] = data['boxes_center_3d'][batch_id, 1]
             # 只需要判断gt标注中的sub和obj的3D关系
-            direction_list = self.calculate_direction(data['centroid'][:,:2])
+            direction_list = self.calculate_direction(new_data_center)
             return np.array(direction_list).astype(np.object_)
         else:
             vis_feats = data['vis_feats'].to(device)
             sentence = data['batch_entry']['sentences']
             data = data['batch_entry_3d']
             data['centroid'] = data['centroid'].to(device)
+            data['boxes_center_3d'] = data['boxes_center_3d'].to(device)
             data['obj_conf'] = data['obj_conf'].to(device)
             data['basis'] = data['basis'].to(device)
             data['coeffs'] = data['coeffs'].to(device)
+            data['mask_ture_class'] = data['mask_ture_class'].to(device)
             class_name = data['class_name']
             # 需要判断sub和middle, middle和obj的关系
             # step1 计算邻接矩阵
@@ -49,8 +62,12 @@ class Model(nn.Module):
             # step2 计算图输出
             s_v, s_e = self.OcGCN(data,vis_feats, adjacency_matrix)
             time_2 = time.time()
-            # step3 子图选择，边得分 # TODO 边得分需要计算损失 如果根据要求没有找到合适的子图，没有子图连边，应该是只输入sub和obj吗，还是强制至少有一个子图
-            subgraph, s_e_score = self.subgraph_creator(s_e, adjacency_matrix)
+            # step3 子图选择，边得分 # TODO 边得分需要计算损失 如果根据要求没有找到合适的子图，没有子图连边，应该是只输入sub和obj吗，还是强制至少有一个子图 子图有四种形式，目前只考虑了三种，并且第一种没有处理
+            # 子图1, 只有两个target目标存在连线 # 这种情况得到提示词用一个的吧
+            # 子图2, 存在一个额外目标与sub存在连线 # 这种情况的用两个
+            # 子图3, 存在一个额外目标与obj存在连线 # 这种情况的用两个
+            # 子图4, 存在两个额外目标, 分别与sub和obj存在连线 # 这种情况需要
+            subgraph, s_e_score, flag = self.subgraph_creator(s_e, adjacency_matrix)
             time_3 = time.time()
             # step4 得出r_G
             r_G = self.meanpool(s_v, s_e, subgraph, s_e_score, num_node)
@@ -58,8 +75,25 @@ class Model(nn.Module):
             # TODO step5 得出方位, 用作视觉语言模型的提示词, 还需要判断是否使用模型提供的3D目标框
             B = subgraph.shape[0]
             arange = torch.arange(B)
-            middle_center = data['centroid'][arange.to(device),subgraph].view(B,1,-1)
-            calculate_center = torch.cat([data['centroid'][ : , 0:2], middle_center],dim=1)
+            # middle_center = data['centroid'][arange.to(device),subgraph].view(B,1,-1)
+            # middle_center_2d_boxex = data['boxes_center_3d'][arange.to(device),subgraph].view(B,1,-1)
+            # TODO 更改获取中心规则, 根据flag的不同来
+            calculate_center = torch.zeros(B,4,3).to(device)
+            for batch_id, subgraph_id in enumerate(subgraph):
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, subgraph_id] == 1:
+                    calculate_center[batch_id, 0] = data['centroid'][batch_id,0]
+                    calculate_center[batch_id, 2] = data['centroid'][batch_id,subgraph_id]
+                else:
+                    calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id,0]
+                    calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id,subgraph_id]
+                if data['mask_ture_class'][batch_id, 1] == 1 and data['mask_ture_class'][batch_id, subgraph_id] == 1:
+                    calculate_center[batch_id, 1] = data['centroid'][batch_id,subgraph_id]
+                    calculate_center[batch_id, 3] = data['centroid'][batch_id,1]
+                else:
+                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id,subgraph_id]
+                    calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id,1]
+
+            # calculate_center = torch.cat([data['centroid'][ : , 0:2], middle_center],dim=1)
 
             # TODO 如果有没有子图连边的情况, 需要进行判别, 生成一个mask, 关系导出时为void
             direction_list = self.calculate_direction(calculate_center)
@@ -102,8 +136,10 @@ class Model(nn.Module):
             S_M = center[:, 0 :1]   # [B, 1, 3]
             M_O = center[:, -1: ]   # [B, 1, 3]
         else:
-            S_M = torch.cat([center[:, 0:1], center[:,-1:  ]], dim=-2)  # [B, 2, 3]
-            M_O = torch.cat([center[:,-1: ], center[:,-2:-1]], dim=-2)  # [B, 2, 3]
+            # S_M = torch.cat([center[:, 0:1], center[:,-1:  ]], dim=-2)  # [B, 2, 3]
+            # M_O = torch.cat([center[:,-1: ], center[:,-2:-1]], dim=-2)  # [B, 2, 3]
+            S_M = center[:,  :2]
+            M_O = center[:,-2: ]
         K = S_M.shape[1]
         delta = torch.abs(S_M - M_O) # [B,2,3] 第一相减代表sub和middle 第二相减代表middle和obj
         # 如果距离差值均小于0.2，关系为next to
@@ -173,7 +209,7 @@ class Model(nn.Module):
         B, N, _ = centroid.shape
 
         A = torch.ones((B, N, N)).to(device)                        # 初始化输出(邻接矩阵)
-        eye_reverse = (torch.ones([N, N])-torch.eye(N)).to(device)  # 主对角线为0,其余为1,为了消去主对角线的自身关系
+        eye_reverse = (1. - torch.eye(N)).to(device)                # 主对角线为0,其余为1,为了消去主对角线的自身关系
         eye_reverse = eye_reverse.unsqueeze(0).repeat(B, 1, 1)      # 为每个batch复制
 
         centroid_V = centroid.unsqueeze(2).repeat(1,1,N,1)          # 行复制，每一行都是一样的, [B,N,3] --> [B,N,1,3] --> [B,N,N,3]

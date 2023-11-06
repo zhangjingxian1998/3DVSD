@@ -1,3 +1,5 @@
+# 正式训练时的输入模板变化, 还要额外训练一个3DVSD的encoder, 模型需要学习的提示词增加一个<TGT>
+# 与之对比的输出是描述性语句
 import sys
 import os
 current_path = ('/').join((sys.path[0].split('/'))[:-3])

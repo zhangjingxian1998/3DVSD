@@ -2,6 +2,7 @@ import torch
 import numpy
 from vsd_3d.models import EDGESCORE
 import torch.nn as nn
+import copy
 class SUBGRAPH(nn.Module):
     def __init__(self):
         '''
@@ -23,14 +24,39 @@ class SUBGRAPH(nn.Module):
         s_e_score = s_e_score.view(B, N, N) * adjacency_matrix_mask_float   # 网络处理完后，形状恢复 [B, N*N, 1] --> [B, N, N] 并且只保留存在边关系的得分
 
         # step2
-        sub_max_score, sub_max_score_id = torch.max(s_e_score[:,0],dim=-1)  # 取sub和各边的分数，取最大值和其索引
-        obj_max_score, obj_max_score_id = torch.max(s_e_score[:,1],dim=-1)  # 取obj和各边的分数，取最大值和其索引
-        # step3
-        sub_score_mask = (sub_max_score > obj_max_score).byte()  # 和sub连接的中间类
-        obj_score_mask = (obj_max_score > sub_max_score).byte()  # 和obj连接的中间类 二者是互补的
-        final_id = sub_max_score_id * sub_score_mask \
-                    + obj_score_mask * obj_max_score_id
-        return final_id, s_e_score
+        flag = torch.ones(B) * -1
+        sub_max_score, sub_max_score_id = torch.max(s_e_score[:,0],dim=-1)  # 取sub和各边的分数，取最大值和其索引 [B]
+        obj_max_score, obj_max_score_id = torch.max(s_e_score[:,1],dim=-1)  # 取obj和各边的分数，取最大值和其索引 [B]
+        # step3 TODO 需要一个额外的状态标志     0:final_id == 0             这个标志形状应是[B,2]的, 一维上的0行表示与sub的关系, -1为没关系, 其余值为对应的与之相连的索引
+                                                                                                    # 1行表示与obj的关系, -1为没关系, 其余值为对应的与之相连的索引
+                                            # 1:final_id != 0 与sub相连
+                                            # 2:final_id != 0 与obj相连
+                                            # 3:额外判断, 有两个
+        # sub_score_mask = (sub_max_score > obj_max_score).byte()  # 和sub连接的中间类
+        # obj_score_mask = (obj_max_score > sub_max_score).byte()  # 和obj连接的中间类 二者是互补的
+        # final_id = sub_max_score_id * sub_score_mask \
+        #             + obj_score_mask * obj_max_score_id           # 这种是不对的
+        mask_1 = (sub_max_score_id == obj_max_score_id).float() # 相等的地方需要对分数进行判断, 将分数高的地方保留
+        sub_max_score_id_tmp = copy.deepcopy(sub_max_score_id)
+        obj_max_score_id_tmp = copy.deepcopy(obj_max_score_id)
+        sub_max_score_id[mask_1] = 0
+        obj_max_score_id[mask_1] = 0
+        mask_sub = (sub_max_score * mask_1) > (obj_max_score * mask_1)
+        mask_obj = (obj_max_score * mask_1) > (sub_max_score * mask_1)
+        sub_max_score_id[mask_sub] = sub_max_score_id_tmp[mask_sub]
+        obj_max_score_id[mask_obj] = obj_max_score_id_tmp[mask_obj]
+        final_id = torch.cat([sub_max_score_id.unsqueeze(-1), obj_max_score_id.unsqueeze(-1)], dim=-1) # [B, 2]
+        for i, id in enumerate(final_id):
+            if id[0]>0 and id[1]>0:
+                flag[i] = 3
+            elif id[0]>0:
+                flag[i]=1
+            elif id[1]>0:
+                flag[i]=2
+            else:
+                flag[i]=0
+
+        return final_id, s_e_score, flag
     
     def forward_(self, s_e, adjacency_matrix): # 节省显存
         B, N, _, D = s_e.shape

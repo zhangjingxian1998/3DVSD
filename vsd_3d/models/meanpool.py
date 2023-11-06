@@ -17,7 +17,7 @@ class MeanPool(nn.Module):
         # 为去除没有子节点情况的干扰, 即把第一列清0
         zero_one_hot = torch.ones_like(lam_b)
         zero_one_hot[:,0] = 0
-
+        # TODO 更改, 要把妹有节点和双节点的考虑进去， 可能只需要做两次one_hot就行
         sub_graph_mask = one_hot(sub_graph,num_classes=N)
         sub_graph_mask = sub_graph_mask * zero_one_hot      # 分子上的 +1
         

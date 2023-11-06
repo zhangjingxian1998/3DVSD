@@ -29,6 +29,17 @@ vrd_feature_dir = vrd_dir.joinpath('features')
 
 predicate = ["on", "to the left of", "under", "behind", "to the right of", "in", "next to", "in front of", "above"]
 predicate_map = {p: i for i, p in enumerate(predicate)}
+synonyms = {
+    'on':['upon', 'over'],
+    'to the left of':['to the left of'],
+    'under':['below', 'beneath', 'underneath'],
+    'behind':['after', 'at the back of', 'back'],
+    'to the right of':['to the right of'],
+    'in':['in'],
+    'next to':['next to'],
+    'in the front of':['ahead of'],
+    'above':['upon', 'over']
+}
 
 class VSD_3D_FineTuneDataset(Dataset):
     def __init__(self, split='train', raw_dataset=None, rank=-1, topk=-1, verbose=True, args=None, mode='train'):
@@ -180,6 +191,7 @@ class VSD_3D_FineTuneDataset(Dataset):
                 img_h = f[f'{img_id}/img_h'][()]
                 img_w = f[f'{img_id}/img_w'][()]
                 boxes = f[f'{img_id}/boxes'][()][:2]  # (x1, y1, x2, y2)
+
                 boxes[:, (0, 2)] /= img_w
                 boxes[:, (1, 3)] /= img_h
                 boxes[boxes>1] = 1
@@ -190,7 +202,10 @@ class VSD_3D_FineTuneDataset(Dataset):
                 boxes.clamp_(min=0.0, max=1.0)
 
                 n_boxes = len(boxes)
-
+                
+                boxes_center_w = ((boxes[:,2:3] - boxes[:,0:1]) / 2) * img_w
+                boxes_center_h = ((boxes[:,-1:] - boxes[:,1:2]) / 2) * img_h
+                boxes_center_3d = torch.cat([torch.zeros(n_boxes,1), boxes_center_w, boxes_center_h], dim=-1) # 深度方向为0, 其余取自身的2D location
                 # feats = np.zeros(shape=(n_boxes, 2048), dtype=np.float32)
                 feats = f[f'{img_id}/features'][()][:2]
                 feats = torch.from_numpy(feats)
@@ -212,6 +227,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             out_dict_3dvsd['class_name'] = f[f'{img_id}/3d/object/class_name'][()][:2] # 物体的类别名称(1600类)
             out_dict_3dvsd['mask_ture_class'] = f[f'{img_id}/3d/object/mask_ture_class'][()][0][:2] # 物体类别是否与nyu40类对应，对应的物体处为1
             out_dict_3dvsd['centroid'] = np.matmul(r_ex.reshape(1,3,3).repeat(n_boxes,axis=0), centroid.reshape(-1,3,1)).reshape(n_boxes,3) # 位置转换到相机坐标系
+            out_dict_3dvsd['boxes_center_3d'] = boxes_center_3d
 
             # 不能直接在这里转input_id，因为子图没有，没有办法生成
             ###########   TEXT   ####################
@@ -267,6 +283,10 @@ class VSD_3D_FineTuneDataset(Dataset):
 
                 n_boxes = len(boxes)
 
+                boxes_center_w = ((boxes[:,2:3] - boxes[:,0:1]) / 2) * img_w
+                boxes_center_h = ((boxes[:,-1:] - boxes[:,1:2]) / 2) * img_h
+                boxes_center_3d = torch.cat([torch.zeros(n_boxes,1), boxes_center_w, boxes_center_h], dim=-1) # 深度方向为0, 其余取自身的2D location
+
                 feats = np.zeros(shape=(n_boxes, 2048), dtype=np.float32)
                 f[f'{img_id}/features'].read_direct(feats)
                 feats = torch.from_numpy(feats)
@@ -297,6 +317,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             obj_conf = np.insert(obj_conf,0,1)
             obj_conf = np.insert(obj_conf,0,1)
             out_dict_3dvsd['obj_conf'] = obj_conf
+            out_dict_3dvsd['boxes_center_3d'] = boxes_center_3d
 
             # 不能直接在这里转input_id，因为子图没有，没有办法生成
             ###########   TEXT   ###################################################################### TODO(zhangjignxian) 输入词替换
@@ -406,11 +427,13 @@ class VSD_3D_FineTuneDataset(Dataset):
             r_ex = torch.zeros(B, 3, 3, dtype=torch.float)
             centroid = torch.zeros(B, N, 3, dtype=torch.float)
             mask_ture_class = torch.zeros(B, N, dtype=torch.float)
+            boxes_center_3d = torch.zeros(B, N, 3, dtype=torch.float)
             class_name = []
 
             for i, entry in enumerate(batch):
                 r_ex[i, : ] = torch.tensor(entry['out_dict_3dvsd']['r_ex'])
                 centroid[i, : ] = torch.tensor(entry['out_dict_3dvsd']['centroid'])
+                boxes_center_3d[i,:] = entry['out_dict_3dvsd']['boxes_center_3d']
                 mask_ture_class[i, : ] = torch.tensor(entry['out_dict_3dvsd']['mask_ture_class'])
                 name_list = str(b'[MASK]'.join(list(entry['out_dict_3dvsd']['class_name'])))[2:-1].split('[MASK]')
                 class_name.append(name_list)
@@ -419,6 +442,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             batch_entry_3d['centroid'] = centroid # [B,N,3]
             batch_entry_3d['mask_ture_class'] = mask_ture_class # [B,N]
             batch_entry_3d['class_name'] = np.array(class_name).astype(np.object_)
+            batch_entry_3d['boxes_center_3d'] = boxes_center_3d
             
             return {'batch_entry':batch_entry, 'batch_entry_3d':batch_entry_3d, 'vis_feats':vis_feats}
 
@@ -499,12 +523,14 @@ class VSD_3D_FineTuneDataset(Dataset):
             coeffs = torch.zeros(B, N, 3, dtype=torch.float)
             mask_ture_class = torch.zeros(B, N, dtype=torch.float)
             obj_conf = torch.zeros(B, N, dtype=torch.float)
+            boxes_center_3d = torch.zeros(B, N, 3, dtype=torch.float)
             class_name = []
 
             for i, entry in enumerate(batch):
                 r_ex[i, : ] = torch.tensor(entry['out_dict_3dvsd']['r_ex'])
                 basis[i, : ] = torch.tensor(entry['out_dict_3dvsd']['basis'])
                 centroid[i, : ] = torch.tensor(entry['out_dict_3dvsd']['centroid'])
+                boxes_center_3d[i,:] = entry['out_dict_3dvsd']['boxes_center_3d']
                 coeffs[i, : ] = torch.tensor(entry['out_dict_3dvsd']['coeffs'])
                 mask_ture_class[i, : ] = torch.tensor(entry['out_dict_3dvsd']['mask_ture_class'])
                 obj_conf[i, :] = torch.tensor(entry['out_dict_3dvsd']['obj_conf'])
@@ -519,6 +545,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             batch_entry_3d['mask_ture_class'] = mask_ture_class # [B,N]
             batch_entry_3d['class_name'] = np.array(class_name).astype(np.object_)
             batch_entry_3d['obj_conf'] = obj_conf
+            batch_entry_3d['boxes_center_3d'] = boxes_center_3d
             
             return {'batch_entry':batch_entry, 'batch_entry_3d':batch_entry_3d, 'vis_feats':vis_feats}
 

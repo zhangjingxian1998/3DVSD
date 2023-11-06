@@ -1,3 +1,6 @@
+# pretrain的目的应该是让模型去学习一下 <OBJ> <REL> 这两个词的含义, 使用的图片特征是total3D中的resnet层输出
+# 输入提示模板 <OBJ> sub_name <REL> gt_rel or other 同义词 <OBJ> obj_name
+# 与之对比的输出 sub_name,rel,obj_name
 import sys
 import os
 current_path = ('/').join((sys.path[0].split('/'))[:-3])
