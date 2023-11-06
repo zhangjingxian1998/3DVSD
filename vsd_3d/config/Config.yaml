@@ -1,0 +1,2 @@
+use_vision: True
+max_n_boxes: 36
