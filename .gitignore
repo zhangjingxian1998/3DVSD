@@ -2,10 +2,11 @@ py-bottom-up-attention
 language-evaluation
 Total3DUnderstanding
 data/*
-train.log
+*.log
 test.ipynb
 VL-T5/snap
 VL-T5/t5-base
 .vscode
 *.pyc
 __pycache__
+VL-T5/bart-base

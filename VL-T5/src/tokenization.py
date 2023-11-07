@@ -168,7 +168,11 @@ class VLT5TokenizerFast(T5TokenizerFast):
         additional_special_tokens.extend(["<TGT>"])
         additional_special_tokens.extend(["<OBJ>"])
         additional_special_tokens.extend(["<REL>"])
-        additional_special_tokens.extend(["[SEP]"])
+        additional_special_tokens.extend(["<SEP>"])
+        # additional_special_tokens[0] = '<TGT>'
+        # additional_special_tokens[1] = '<OBJ>'
+        # additional_special_tokens[2] = '<REL>'
+        # additional_special_tokens[3] = '<SEP>'
 
         slow_tokenizer = self.slow_tokenizer_class(
             vocab_file,

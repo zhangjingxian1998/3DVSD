@@ -84,8 +84,8 @@ class Trainer(TrainerBase):
         self.model = self.create_model(model_class, config, **model_kwargs)
 
         if 't5' in self.args.tokenizer: # 可以观察一下更改tokenizer长度后是否还可以加载权重 # 新添加词汇后, 原有的权重编码被保留, 后加的词汇初始化编码为固定的, 似乎有什么东西在控制
-            # self.model.resize_token_embeddings(self.tokenizer.vocab_size)
-            self.model.resize_token_embeddings(len(self.tokenizer))
+            self.model.resize_token_embeddings(self.tokenizer.vocab_size)
+            # self.model.resize_token_embeddings(len(self.tokenizer))
         elif 'bart' in self.args.tokenizer:
             self.model.resize_token_embeddings(self.model.model.shared.num_embeddings + num_added_toks)
 
@@ -125,8 +125,8 @@ class Trainer(TrainerBase):
         if self.verbose:
             print(f'It took {time() - start:.1f}s')
 
-        self.split_word = '<extra_id_99>'
-        self.split_id = self.tokenizer.encode(self.split_word, return_tensors="pt", add_special_tokens=False)
+        # self.split_word = '<extra_id_99>'
+        # self.split_id = self.tokenizer.encode(self.split_word, return_tensors="pt", add_special_tokens=False)
 
 
     def train(self):
@@ -160,10 +160,10 @@ class Trainer(TrainerBase):
             
             for step_i, batch in enumerate(self.train_loader):
                 time_0 = time.time()
-                direction_list = self.vsd_3d_encoder(self.args, batch)
+                text_prompt = self.vsd_3d_encoder(self.args, batch)
                 time_1 = time.time()
                 # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
-                batch['batch_entry']['input_ids'] = self.text_process(batch, self.split_word, self.split_id, direction_list)
+                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 # 输出的vsd_3d_result应该包括： 
                 # r_G: 用作后续VL模型中的decoder做cross_attention
                 # 子图的额外类类名，用作填进提示词中 # 如果没有额外的类应该怎么办
@@ -404,31 +404,11 @@ class Trainer(TrainerBase):
 
             return acc_dict
     
-    def text_process(self, batch,split_word, split_id, direction_list):
+    def text_process(self, batch, text_prompt):
         B = batch['vis_feats'].shape[0]
-        direction_list = direction_list.reshape(B,1)
-        arange = np.arange(B)
-        input_text = batch['batch_entry']['input_text']
-
-        replace_rel = np.array(self.train_loader.dataset.prompt_template_VL_pretrain_replace_rel_id)
-        replace_rel = np.repeat(replace_rel.reshape(1,-1), B, axis=0)
-
-        input_text[arange,replace_rel[:,0]] = direction_list[:, 0]
-        extra_id_split = np.repeat(np.array([[split_word]]).astype(np.object_),B,axis=0)
-        input_text = np.concatenate([input_text, extra_id_split], axis=-1)
-        input_text = input_text.reshape(-1).tolist()
-        input_text = ' '.join(input_text)
-        input_id = self.tokenizer.encode(input_text, return_tensors='pt', add_special_tokens = False)
-        index = torch.where(input_id==split_id)[1]
         input_ids = []
-        input_id = input_id.view(-1)
-        for i in range(B-1):
-            if i == 0:
-                input_ids.append(input_id[:index[i]])
-            else:
-                input_ids.append(input_id[index[i-1]+1:index[i]])
-        input_ids.append(input_id[index[-2]+1:-1])
-        # 需要给其按照最大长度补0
+        for text in text_prompt:
+            input_ids.append(self.tokenizer.encode(text, return_tensors='pt', max_length=self.args.max_text_length, truncation=True)[0])
         S_W_L = 0
         length = []
         for input_id in input_ids:
@@ -439,6 +419,42 @@ class Trainer(TrainerBase):
         for i in range(B):
             input_ids_tensor[i,:length[i]] = input_ids[i]
         return input_ids_tensor
+
+    # def text_process_(self, batch,split_word, split_id, direction_list):
+    #     B = batch['vis_feats'].shape[0]
+    #     direction_list = direction_list.reshape(B,1)
+    #     arange = np.arange(B)
+    #     input_text = batch['batch_entry']['input_text']
+
+    #     replace_rel = np.array(self.train_loader.dataset.prompt_template_VL_pretrain_replace_rel_id)
+    #     replace_rel = np.repeat(replace_rel.reshape(1,-1), B, axis=0)
+
+    #     input_text[arange,replace_rel[:,0]] = direction_list[:, 0]
+    #     extra_id_split = np.repeat(np.array([[split_word]]).astype(np.object_),B,axis=0)
+    #     input_text = np.concatenate([input_text, extra_id_split], axis=-1)
+    #     input_text = input_text.reshape(-1).tolist()
+    #     input_text = ' '.join(input_text)
+    #     input_id = self.tokenizer.encode(input_text, return_tensors='pt', add_special_tokens = False)
+    #     index = torch.where(input_id==split_id)[1]
+    #     input_ids = []
+    #     input_id = input_id.view(-1)
+    #     for i in range(B-1):
+    #         if i == 0:
+    #             input_ids.append(input_id[:index[i]])
+    #         else:
+    #             input_ids.append(input_id[index[i-1]+1:index[i]])
+    #     input_ids.append(input_id[index[-2]+1:-1])
+    #     # 需要给其按照最大长度补0
+    #     S_W_L = 0
+    #     length = []
+    #     for input_id in input_ids:
+    #         if input_id.shape[0] > S_W_L:
+    #             S_W_L = input_id.shape[0]
+    #         length.append(input_id.shape[0])
+    #     input_ids_tensor = torch.ones(B, S_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
+    #     for i in range(B):
+    #         input_ids_tensor[i,:length[i]] = input_ids[i]
+    #     return input_ids_tensor
 
 def main_worker(gpu, args, total3d_model, vsd_3d_encoder):
     # GPU is assigned

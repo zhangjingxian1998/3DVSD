@@ -36,7 +36,7 @@ class SUBGRAPH(nn.Module):
         # obj_score_mask = (obj_max_score > sub_max_score).byte()  # 和obj连接的中间类 二者是互补的
         # final_id = sub_max_score_id * sub_score_mask \
         #             + obj_score_mask * obj_max_score_id           # 这种是不对的
-        mask_1 = (sub_max_score_id == obj_max_score_id).float() # 相等的地方需要对分数进行判断, 将分数高的地方保留
+        mask_1 = sub_max_score_id == obj_max_score_id # 相等的地方需要对分数进行判断, 将分数高的地方保留
         sub_max_score_id_tmp = copy.deepcopy(sub_max_score_id)
         obj_max_score_id_tmp = copy.deepcopy(obj_max_score_id)
         sub_max_score_id[mask_1] = 0

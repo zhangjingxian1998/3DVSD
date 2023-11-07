@@ -18,10 +18,12 @@ class MeanPool(nn.Module):
         zero_one_hot = torch.ones_like(lam_b)
         zero_one_hot[:,0] = 0
         # TODO 更改, 要把妹有节点和双节点的考虑进去， 可能只需要做两次one_hot就行
-        sub_graph_mask = one_hot(sub_graph,num_classes=N)
-        sub_graph_mask = sub_graph_mask * zero_one_hot      # 分子上的 +1
+        sub_graph_mask_subject = one_hot(sub_graph[:, 0],num_classes=N)
+        sub_graph_mask_object  = one_hot(sub_graph[:, 1],num_classes=N)
+        sub_graph_mask_subject = sub_graph_mask_subject * zero_one_hot      # 分子上的 +1
+        sub_graph_mask_object  = sub_graph_mask_object  * zero_one_hot
         
-        score = torch.sum(score,dim=1) + sub_graph_mask
+        score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object
         lam = score / lam_b
         
         r_G = self.meanpool(s_v,s_e,lam,num_node)

@@ -21,16 +21,16 @@ class Model(nn.Module):
         pass
 
     def forward(self, args, data):
-        device = next(self.parameters()).device
+        self.device = next(self.parameters()).device
         self.args = args
         if args.VL_pretrain:
             data = data['batch_entry_3d']
-            data['centroid'] = data['centroid'].to(device)
-            data['boxes_center_3d'] = data['boxes_center_3d'].to(device)
-            data['mask_ture_class'] = data['mask_ture_class'].to(device) # 把这个mask_true_class 做成一个邻接矩阵, 只有两个对应类全都是total3d中能够检测的类, 才取他们对应的centroid, 否则, 取他们的boxes_center_3d
+            data['centroid'] = data['centroid'].to(self.device)
+            data['boxes_center_3d'] = data['boxes_center_3d'].to(self.device)
+            data['mask_ture_class'] = data['mask_ture_class'].to(self.device) # 把这个mask_true_class 做成一个邻接矩阵, 只有两个对应类全都是total3d中能够检测的类, 才取他们对应的centroid, 否则, 取他们的boxes_center_3d
             class_name = data['class_name']
             # 重新定义对3d坐标点进行取值 写for循环得了
-            new_data_center = torch.zeros(data['centroid'].shape[0],2,3).to(device)
+            new_data_center = torch.zeros(data['centroid'].shape[0],2,3).to(self.device)
             for batch_id, mask_true in enumerate(torch.sum(data['mask_ture_class'], dim=-1)):
                 if mask_true == 2:
                     new_data_center[batch_id,0] = data['centroid'][batch_id, 0]
@@ -40,17 +40,24 @@ class Model(nn.Module):
                     new_data_center[batch_id,1] = data['boxes_center_3d'][batch_id, 1]
             # 只需要判断gt标注中的sub和obj的3D关系
             direction_list = self.calculate_direction(new_data_center)
-            return np.array(direction_list).astype(np.object_)
+            text_prompt = []
+            for batch_id in range(len(direction_list)):
+                sub = class_name[batch_id][0]
+                rel = direction_list[batch_id][0]
+                obj = class_name[batch_id][1]
+                text = f'<OBJ> {sub} <REL> {rel} <OBJ> {obj}'
+                text_prompt.append(text)
+            return text_prompt
         else:
-            vis_feats = data['vis_feats'].to(device)
+            vis_feats = data['vis_feats'].to(self.device)
             sentence = data['batch_entry']['sentences']
             data = data['batch_entry_3d']
-            data['centroid'] = data['centroid'].to(device)
-            data['boxes_center_3d'] = data['boxes_center_3d'].to(device)
-            data['obj_conf'] = data['obj_conf'].to(device)
-            data['basis'] = data['basis'].to(device)
-            data['coeffs'] = data['coeffs'].to(device)
-            data['mask_ture_class'] = data['mask_ture_class'].to(device)
+            data['centroid'] = data['centroid'].to(self.device)
+            data['boxes_center_3d'] = data['boxes_center_3d'].to(self.device)
+            data['obj_conf'] = data['obj_conf'].to(self.device)
+            data['basis'] = data['basis'].to(self.device)
+            data['coeffs'] = data['coeffs'].to(self.device)
+            data['mask_ture_class'] = data['mask_ture_class'].to(self.device)
             class_name = data['class_name']
             # 需要判断sub和middle, middle和obj的关系
             # step1 计算邻接矩阵
@@ -73,34 +80,16 @@ class Model(nn.Module):
             r_G = self.meanpool(s_v, s_e, subgraph, s_e_score, num_node)
             time_4 = time.time()
             # TODO step5 得出方位, 用作视觉语言模型的提示词, 还需要判断是否使用模型提供的3D目标框
-            B = subgraph.shape[0]
-            arange = torch.arange(B)
-            # middle_center = data['centroid'][arange.to(device),subgraph].view(B,1,-1)
-            # middle_center_2d_boxex = data['boxes_center_3d'][arange.to(device),subgraph].view(B,1,-1)
             # TODO 更改获取中心规则, 根据flag的不同来
-            calculate_center = torch.zeros(B,4,3).to(device)
-            for batch_id, subgraph_id in enumerate(subgraph):
-                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, subgraph_id] == 1:
-                    calculate_center[batch_id, 0] = data['centroid'][batch_id,0]
-                    calculate_center[batch_id, 2] = data['centroid'][batch_id,subgraph_id]
-                else:
-                    calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id,0]
-                    calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id,subgraph_id]
-                if data['mask_ture_class'][batch_id, 1] == 1 and data['mask_ture_class'][batch_id, subgraph_id] == 1:
-                    calculate_center[batch_id, 1] = data['centroid'][batch_id,subgraph_id]
-                    calculate_center[batch_id, 3] = data['centroid'][batch_id,1]
-                else:
-                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id,subgraph_id]
-                    calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id,1]
-
-            # calculate_center = torch.cat([data['centroid'][ : , 0:2], middle_center],dim=1)
-
-            # TODO 如果有没有子图连边的情况, 需要进行判别, 生成一个mask, 关系导出时为void
+            calculate_center, extral_flag_3_center = self.extra_center(data, subgraph, flag)
             direction_list = self.calculate_direction(calculate_center)
+            if extral_flag_3_center.shape[0]:
+                direction_list_extral = self.calculate_direction(extral_flag_3_center)
+
+            # TODO 接下来根据flag的不同, 生成不同的提示语句
             time_5 = time.time()
             # 返回子图中间节点类别
-            subgraph_class = class_name[arange, subgraph.cpu()]
-
+            text_prompt = self.extral_text_prompt(class_name, subgraph, flag, direction_list, direction_list_extral)
             # 计算损失值
             loss = self.loss_score(s_e_score, adjacency_matrix, class_name, sentence)
             time_6 = time.time()
@@ -111,7 +100,7 @@ class Model(nn.Module):
             # print('得出方位耗时:',time_5 - time_4)
             # print('计算损失值耗时:',time_6 - time_5)
             pass
-        return r_G, np.array(direction_list).astype(np.object_), subgraph_class, loss
+        return r_G, text_prompt, loss
 
     def calculate_direction(self,centroid):
         '''
@@ -132,10 +121,10 @@ class Model(nn.Module):
         center = center / norm_center # 完成归一化, 归一化后感觉距离相差不大了, 不知道会有什么影响 # [B,3,3]
 
         #取两种张量，S_M 和 M_O 方便后续运算
-        if self.args.VL_pretrain:
+        if center.shape[1] == 2 :
             S_M = center[:, 0 :1]   # [B, 1, 3]
             M_O = center[:, -1: ]   # [B, 1, 3]
-        else:
+        elif center.shape[1] == 4:
             # S_M = torch.cat([center[:, 0:1], center[:,-1:  ]], dim=-2)  # [B, 2, 3]
             # M_O = torch.cat([center[:,-1: ], center[:,-2:-1]], dim=-2)  # [B, 2, 3]
             S_M = center[:,  :2]
@@ -227,6 +216,100 @@ class Model(nn.Module):
         # A[:,0,1], A[:,1,0]= 1, 1 # 确保sub和obj之间存在关系
 
         return A
+    def extra_center(self, data, subgraph, flag):
+        B = subgraph.shape[0]
+        extral_flag_3_center = torch.tensor([]).to(self.device)
+        calculate_center = torch.zeros(B,4,3).to(self.device)
+        for batch_id, flag_one in enumerate(flag):
+            if flag_one == 0: # 状况0
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1]:
+                    calculate_center[batch_id, 0] = data['centroid'][batch_id,0]
+                    calculate_center[batch_id, 1] = data['centroid'][batch_id,0]
+                    calculate_center[batch_id, 2] = data['centroid'][batch_id,1]
+                    calculate_center[batch_id, 3] = data['centroid'][batch_id,1]
+                else:
+                    calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id,0]
+                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id,0]
+                    calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id,1]
+                    calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id,1]
+            elif flag_one == 1: # 状况1
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, subgraph[batch_id, 0]] == 1:
+                    calculate_center[batch_id, 0] = data['centroid'][batch_id, subgraph[batch_id, 0]]
+                    calculate_center[batch_id, 1] = data['centroid'][batch_id, 0]
+                else:
+                    calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id, subgraph[batch_id, 0]]
+                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id, 0]
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
+                    calculate_center[batch_id, 2] = data['centroid'][batch_id, 0]
+                    calculate_center[batch_id, 3] = data['centroid'][batch_id, 1]
+                else:
+                    calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id, 0]
+                    calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id, 1]
+                
+            elif flag_one == 2: # 状况2
+                if data['mask_ture_class'][batch_id, 1] == 1 and data['mask_ture_class'][batch_id, subgraph[batch_id, 1]] == 1:
+                    calculate_center[batch_id, 0] = data['centroid'][batch_id, subgraph[batch_id, 1]]
+                    calculate_center[batch_id, 1] = data['centroid'][batch_id, 1]
+                else:
+                    calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id, subgraph[batch_id, 1]]
+                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id, 1]
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
+                    calculate_center[batch_id, 2] = data['centroid'][batch_id, 1]
+                    calculate_center[batch_id, 3] = data['centroid'][batch_id, 0]
+                else:
+                    calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id, 1]
+                    calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id, 0]
+            elif flag_one == 3: # 状况3
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, subgraph[batch_id, 0]] == 1:
+                    calculate_center[batch_id, 0] = data['centroid'][batch_id, subgraph[batch_id, 0]]
+                    calculate_center[batch_id, 1] = data['centroid'][batch_id, 0]
+                else:
+                    calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id, subgraph[batch_id, 0]]
+                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id, 0]
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
+                    calculate_center[batch_id, 2] = data['centroid'][batch_id, 0]
+                    calculate_center[batch_id, 3] = data['centroid'][batch_id, 1]
+                else:
+                    calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id, 0]
+                    calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id, 1]
+                if data['mask_ture_class'][batch_id, 1] == 1 and data['mask_ture_class'][batch_id, subgraph[batch_id, 1]] == 1:
+                    extral_flag_3_center = torch.cat([extral_flag_3_center, torch.cat([data['centroid'][batch_id, 1:2], data['centroid'][batch_id, subgraph[batch_id, 1]:subgraph[batch_id, 1]+1]], dim=0).unsqueeze(0)], dim=0)
+                else:
+                    extral_flag_3_center = torch.cat([extral_flag_3_center, torch.cat([data['boxes_center_3d'][batch_id, 1:2], data['boxes_center_3d'][batch_id, subgraph[batch_id, 1]:subgraph[batch_id, 1]+1]], dim=0).unsqueeze(0)], dim=0)
+        return calculate_center, extral_flag_3_center
+
+    def extral_text_prompt(self, class_name, subgraph, flag, direction_list, direction_list_extral):
+        subgraph = subgraph.cpu()
+        B = subgraph.shape[0]
+        arange = np.arange(B) 
+        subgraph_class_subject = class_name[arange, subgraph[:,0]]
+        subgraph_class_object  = class_name[arange, subgraph[:,1]]
+
+        text_prompt = []
+        # flag 0 <TGT> sub <TGT> obj [SEP] <OBJ> sub     <REL> rel <OBJ> obj
+        # flag 1 <TGT> sub <TGT> obj [SEP] <OBJ> middle  <REL> rel <OBJ> sub <OBJ> sub <REL> rel <OBJ> obj
+        # flag 2 <TGT> sub <TGT> obj [SEP] <OBJ> middle  <REL> rel <OBJ> obj <OBJ> obj <REL> rel <OBJ> sub
+        # flag 3 <TGT> sub <TGT> obj [SEP] <OBJ> middle1 <REL> rel <OBJ> sub <OBJ> sub <REL> rel <OBJ> obj <OBJ> obj <REL> rel <OBJ> middle2
+        a = 0 # 用于关注flag=3的状态
+        for batch_id, flag_one in enumerate(flag):
+            sub = class_name[batch_id][0]
+            obj = class_name[batch_id][1]
+            middle_sub = subgraph_class_subject[batch_id]
+            middle_obj = subgraph_class_object[batch_id]
+            rel_1 = direction_list[batch_id][0]
+            rel_2 = direction_list[batch_id][1]
+            if flag_one == 0:
+                text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {sub} <REL> {direction_list[batch_id][0]} <OBJ> {obj}'
+            elif flag_one == 1:
+                text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {middle_sub} <REL> {rel_1} <OBJ> {sub} <OBJ> {sub} <REL> {rel_2} <OBJ> {obj}'
+            elif flag_one == 2:
+                text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {middle_obj}  <REL> {rel_1} <OBJ> {obj} <OBJ> {obj} <REL> {rel_2} <OBJ> {sub}'
+            elif flag_one == 3:
+                rel_3 = direction_list_extral[a][0]
+                text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {middle_sub} <REL> {rel_1} <OBJ> {sub} <OBJ> {sub} <REL> {rel_2} <OBJ> {obj} <OBJ> {obj} <REL> {rel_3} <OBJ> {middle_obj}'
+                a = a + 1
+            text_prompt.append(text)
+        return text_prompt
 
 if __name__ == 'main':
     model = Model()

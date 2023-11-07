@@ -78,9 +78,12 @@ class Trainer(TrainerBase):
             if config.use_vis_order_embedding:
                 additional_special_tokens = [f'<extra_id_{i}>' for i in range(100-1, -1, -1)] + \
                         [f'<vis_extra_id_{i}>' for i in range(100-1, -1, -1)]
+                additional_special_tokens.append('<TGT>')
+                additional_special_tokens.append('<OBJ>')
+                additional_special_tokens.append('<REL>')
+                additional_special_tokens.append('<SEP>')
                 special_tokens_dict = {'additional_special_tokens': additional_special_tokens}
                 num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
-
                 config.default_obj_order_ids = self.tokenizer.convert_tokens_to_ids([f'<vis_extra_id_{i}>' for i in range(100)])
 
         self.model = self.create_model(model_class, config, **model_kwargs)
@@ -156,14 +159,17 @@ class Trainer(TrainerBase):
 
             quesid2ans = {}
             time_start = time.time()
-            split_word = '<extra_id_99>'
-            split_id = self.tokenizer.encode(split_word, return_tensors="pt", add_special_tokens=False)
+            # split_word = '<extra_id_99>'
+            # split_id = self.tokenizer.encode(split_word, return_tensors="pt", add_special_tokens=False)
             for step_i, batch in enumerate(self.train_loader):
                 time_0 = time.time()
-                r_G, direction_list, subgraph_class, score_loss = self.vsd_3d_encoder(self.args, batch)
+                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
+                #####################################################################################
+                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 time_1 = time.time()
+
                 # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
-                batch['batch_entry']['input_ids'] = self.text_process(batch,split_word, split_id, subgraph_class, direction_list)
+                # batch['batch_entry']['input_ids'] = self.text_process(batch,split_word, split_id, text_prompt)
                 # 输出的vsd_3d_result应该包括： 
                 # r_G: 用作后续VL模型中的decoder做cross_attention
                 # 子图的额外类类名，用作填进提示词中 # 如果没有额外的类应该怎么办
@@ -248,11 +254,11 @@ class Trainer(TrainerBase):
 
                 if self.args.distributed:
                     dist.barrier()
-                # print('加载数据集耗时:',time_0-time_start)
-                # print('vsd3d网络处理耗时:',time_1-time_0)
-                # print('VL网络处理耗时:',time_2-time_1)
+                print('加载数据集耗时:',time_0-time_start)
+                print('vsd3d网络处理耗时:',time_1-time_0)
+                print('VL网络处理耗时:',time_2-time_1)
                 time_start = time.time()
-                # print('反向传播耗时:',time_start-time_0)
+                print('反向传播耗时:',time_start-time_0)
                 
 
             if self.verbose:
@@ -388,36 +394,11 @@ class Trainer(TrainerBase):
 
             return acc_dict
     
-    def text_process(self, batch,split_word, split_id, subgraph_class, direction_list):
+    def text_process(self, batch, text_prompt):
         B = batch['vis_feats'].shape[0]
-        arange = np.arange(B)
-        input_text = batch['batch_entry']['input_text']
-
-        replace_middle = np.array(self.train_loader.dataset.prompt_template_replace_middle_id)
-        replace_rel = np.array(self.train_loader.dataset.prompt_template_replace_rel_id)
-        replace_middle = np.repeat(replace_middle.reshape(1,-1), B, axis=0)
-        replace_rel = np.repeat(replace_rel.reshape(1,-1), B, axis=0)
-
-        input_text[arange,replace_middle[:,0]]=subgraph_class
-        input_text[arange,replace_middle[:,1]]=subgraph_class
-
-        input_text[arange,replace_rel[:,0]] = direction_list[:,0]
-        input_text[arange,replace_rel[:,1]] = direction_list[:,1]
-        extra_id_split = np.repeat(np.array([[split_word]]).astype(np.object_),B,axis=0)
-        input_text = np.concatenate([input_text, extra_id_split], axis=-1)
-        input_text = input_text.reshape(-1).tolist()
-        input_text = ' '.join(input_text)
-        input_id = self.tokenizer.encode(input_text, return_tensors='pt', add_special_tokens = False)
-        index = torch.where(input_id==split_id)[1]
         input_ids = []
-        input_id = input_id.view(-1)
-        for i in range(B-1):
-            if i == 0:
-                input_ids.append(input_id[:index[i]])
-            else:
-                input_ids.append(input_id[index[i-1]+1:index[i]])
-        input_ids.append(input_id[index[-2]+1:-1])
-        # TODO 需要给其按照最大长度补0
+        for text in text_prompt:
+            input_ids.append(self.tokenizer.encode(text, return_tensors='pt', max_length=self.args.max_text_length, truncation=True)[0])
         S_W_L = 0
         length = []
         for input_id in input_ids:
@@ -428,6 +409,47 @@ class Trainer(TrainerBase):
         for i in range(B):
             input_ids_tensor[i,:length[i]] = input_ids[i]
         return input_ids_tensor
+
+    # def text_process_(self, batch,split_word, split_id, ):
+    #     B = batch['vis_feats'].shape[0]
+    #     arange = np.arange(B)
+    #     input_text = batch['batch_entry']['input_text']
+
+    #     replace_middle = np.array(self.train_loader.dataset.prompt_template_replace_middle_id)
+    #     replace_rel = np.array(self.train_loader.dataset.prompt_template_replace_rel_id)
+    #     replace_middle = np.repeat(replace_middle.reshape(1,-1), B, axis=0)
+    #     replace_rel = np.repeat(replace_rel.reshape(1,-1), B, axis=0)
+
+    #     input_text[arange,replace_middle[:,0]]=subgraph_class
+    #     input_text[arange,replace_middle[:,1]]=subgraph_class
+
+    #     input_text[arange,replace_rel[:,0]] = direction_list[:,0]
+    #     input_text[arange,replace_rel[:,1]] = direction_list[:,1]
+    #     extra_id_split = np.repeat(np.array([[split_word]]).astype(np.object_),B,axis=0)
+    #     input_text = np.concatenate([input_text, extra_id_split], axis=-1)
+    #     input_text = input_text.reshape(-1).tolist()
+    #     input_text = ' '.join(input_text)
+    #     input_id = self.tokenizer.encode(input_text, return_tensors='pt', add_special_tokens = False)
+    #     index = torch.where(input_id==split_id)[1]
+    #     input_ids = []
+    #     input_id = input_id.view(-1)
+    #     for i in range(B-1):
+    #         if i == 0:
+    #             input_ids.append(input_id[:index[i]])
+    #         else:
+    #             input_ids.append(input_id[index[i-1]+1:index[i]])
+    #     input_ids.append(input_id[index[-2]+1:-1])
+    #     # TODO 需要给其按照最大长度补0
+    #     S_W_L = 0
+    #     length = []
+    #     for input_id in input_ids:
+    #         if input_id.shape[0] > S_W_L:
+    #             S_W_L = input_id.shape[0]
+    #         length.append(input_id.shape[0])
+    #     input_ids_tensor = torch.ones(B, S_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
+    #     for i in range(B):
+    #         input_ids_tensor[i,:length[i]] = input_ids[i]
+    #     return input_ids_tensor
 
 def main_worker(gpu, args, total3d_model, vsd_3d_encoder):
     # GPU is assigned
@@ -532,13 +554,17 @@ if __name__ == "__main__":
     args.lr = 5e-5
     args.epochs = 20
     args.num_workers = 4
-    args.backbone = 'VL-T5/t5-base'
-    args.output = 'VL-T5/snap/sp/baseline/test'
-    args.load = None
+    # args.backbone = 'VL-T5/t5-base'
+    # args.load = 'VL-T5/snap/pretrain/VLT5/Epoch30'
+    args.backbone = 'VL-T5/bart-base'
+    args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
+    # args.output = 'VL-T5/snap/sp/baseline/test'
+    # args.load = None
     args.num_beams = 5
     args.batch_size = 32
     args.valid_batch_size = 100
     args.local_rank = 0
+    args.max_text_length = 40
     ##############################################
 
 

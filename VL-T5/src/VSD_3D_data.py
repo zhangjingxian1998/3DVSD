@@ -79,6 +79,7 @@ class VSD_3D_FineTuneDataset(Dataset):
 
             additional_special_tokens = [f'<extra_id_{i}>' for i in range(100-1, -1, -1)] + \
                     [f'<vis_extra_id_{i}>' for i in range(100-1, -1, -1)]
+            
             special_tokens_dict = {'additional_special_tokens': additional_special_tokens}
             num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
 
@@ -149,14 +150,14 @@ class VSD_3D_FineTuneDataset(Dataset):
                 self.source_to_h5 = h5py.File(self.source_to_h5, 'r')
         
         ################################################################################
-        self.prompt_template = np.array(['<TGT>', 'sub', '<TGT>', 'obj', 
-                                '[SEP]', 
-                                '<OBJ>', 'sub', '<REL>', 'rel', '<OBJ>', 'middle',
-                                '<OBJ>', 'middle', '<REL>', 'rel', '<OBJ>', 'obj']).astype(np.object_)
-        self.prompt_template_replace_all_id = [1, 3, 6, 8, 10, 12, 14, 16]
-        self.prompt_template_replace_sub_obj_id = [1, 3, 6, 16] # 替换sub和obj处的词
-        self.prompt_template_replace_middle_id = [10, 12] # 替换子图中间位置的词
-        self.prompt_template_replace_rel_id = [8, 14] # 替换关系词
+        # self.prompt_template = np.array(['<TGT>', 'sub', '<TGT>', 'obj', 
+        #                         '[SEP]', 
+        #                         '<OBJ>', 'sub', '<REL>', 'rel', '<OBJ>', 'middle',
+        #                         '<OBJ>', 'middle', '<REL>', 'rel', '<OBJ>', 'obj']).astype(np.object_)
+        # self.prompt_template_replace_all_id = [1, 3, 6, 8, 10, 12, 14, 16]
+        # self.prompt_template_replace_sub_obj_id = [1, 3, 6, 16] # 替换sub和obj处的词
+        # self.prompt_template_replace_middle_id = [10, 12] # 替换子图中间位置的词
+        # self.prompt_template_replace_rel_id = [8, 14] # 替换关系词
 
         # self.prompt_template_VL_pretrain = np.array(['<TGT>', 'sub', '<TGT>', 'obj', 
         #                                     '[SEP]', 
@@ -165,10 +166,10 @@ class VSD_3D_FineTuneDataset(Dataset):
         # self.prompt_template_VL_pretrain_replace_sub_obj_id = [1, 3, 6, 10] # 替换sub和obj处的词
         # self.prompt_template_VL_pretrain_replace_rel_id = [8] # 替换关系词
 
-        self.prompt_template_VL_pretrain = np.array(['<OBJ>', 'sub', '<REL>', 'rel', '<OBJ>', 'obj']).astype(np.object_)
-        self.prompt_template_VL_pretrain_replace_id = [1, 3, 5] 
-        self.prompt_template_VL_pretrain_replace_sub_obj_id = [1, 5] # 替换sub和obj处的词
-        self.prompt_template_VL_pretrain_replace_rel_id = [3] # 替换关系词
+        # self.prompt_template_VL_pretrain = np.array(['<OBJ>', 'sub', '<REL>', 'rel', '<OBJ>', 'obj']).astype(np.object_)
+        # self.prompt_template_VL_pretrain_replace_id = [1, 3, 5] 
+        # self.prompt_template_VL_pretrain_replace_sub_obj_id = [1, 5] # 替换sub和obj处的词
+        # self.prompt_template_VL_pretrain_replace_rel_id = [3] # 替换关系词
     
     def __len__(self):
         return len(self.data)
@@ -232,18 +233,18 @@ class VSD_3D_FineTuneDataset(Dataset):
             # 不能直接在这里转input_id，因为子图没有，没有办法生成
             ###########   TEXT   ####################
             subject_and_object = datum['subject_and_objects'][0] # 取sub和obj
-            sub = subject_and_object[0]
-            rel_gt = subject_and_object[1]
-            obj = subject_and_object[2]
-            replace_sub_obj = [sub, obj]
-            # 将模板中的sub和obj位置替换为标签
-            input_text = copy.deepcopy(self.prompt_template_VL_pretrain)
-            input_text[self.prompt_template_VL_pretrain_replace_sub_obj_id] = replace_sub_obj
+            # sub = subject_and_object[0]
+            # rel_gt = subject_and_object[1]
+            # obj = subject_and_object[2]
+            # replace_sub_obj = [sub, obj]
+            # # 将模板中的sub和obj位置替换为标签
+            # input_text = copy.deepcopy(self.prompt_template_VL_pretrain)
+            # input_text[self.prompt_template_VL_pretrain_replace_sub_obj_id] = replace_sub_obj
 
             # 先不tolist(), 将所有位置替换完后再tolist()
             ##################################################################################
             
-            out_dict['input_text'] = input_text
+            # out_dict['input_text'] = input_text
             
             target_text = ','.join(subject_and_object)
             out_dict['pretrain_target'] = target_text
@@ -321,25 +322,25 @@ class VSD_3D_FineTuneDataset(Dataset):
 
             # 不能直接在这里转input_id，因为子图没有，没有办法生成
             ###########   TEXT   ###################################################################### TODO(zhangjignxian) 输入词替换
-            subject_and_object = datum['subject_and_objects'][0] # 取sub和obj
-            sub = subject_and_object[0]
-            rel_gt = subject_and_object[1]
-            obj = subject_and_object[2]
-            replace_sub_obj = [sub, obj, sub, obj]
-            # 将模板中的sub和obj位置替换为标签
-            if self.args.VL_pretrain:
-                input_text = copy.deepcopy(self.prompt_template_VL_pretrain)
+            # subject_and_object = datum['subject_and_objects'][0] # 取sub和obj
+            # sub = subject_and_object[0]
+            # rel_gt = subject_and_object[1]
+            # obj = subject_and_object[2]
+            # replace_sub_obj = [sub, obj, sub, obj]
+            # # 将模板中的sub和obj位置替换为标签
+            # if self.args.VL_pretrain:
+            #     input_text = copy.deepcopy(self.prompt_template_VL_pretrain)
 
-                input_text[self.prompt_template_VL_pretrain_replace_sub_obj_id] = [sub, obj, sub, obj]
-                # input_text = self.prompt_template_VL_pretrain
-            else:
-                input_text = copy.deepcopy(self.prompt_template)
-                input_text[self.prompt_template_replace_sub_obj_id] = replace_sub_obj
+            #     input_text[self.prompt_template_VL_pretrain_replace_sub_obj_id] = [sub, obj, sub, obj]
+            #     # input_text = self.prompt_template_VL_pretrain
+            # else:
+            #     input_text = copy.deepcopy(self.prompt_template)
+            #     input_text[self.prompt_template_replace_sub_obj_id] = replace_sub_obj
                 # input_text = self.prompt_template
             # 先不tolist(), 将所有位置替换完后再tolist()
             ##################################################################################
             
-            out_dict['input_text'] = input_text
+            # out_dict['input_text'] = input_text
 
             # out_dict['input_ids'] = torch.LongTensor(input_ids)
             # out_dict['input_length'] = len(input_ids)
@@ -391,8 +392,8 @@ class VSD_3D_FineTuneDataset(Dataset):
                     img_ids.append(entry['out_dict']['img_id'])
                     target_ids[i, :entry['out_dict']['pretrain_target_id_length']] = entry['out_dict']['pretrain_target_id']
 
-                if 'input_text' in entry['out_dict']:
-                    input_text.append(entry['out_dict']['input_text'])
+                # if 'input_text' in entry['out_dict']:
+                #     input_text.append(entry['out_dict']['input_text'])
 
                 targets.append(entry['out_dict']['pretrain_target'])
             
@@ -402,7 +403,7 @@ class VSD_3D_FineTuneDataset(Dataset):
                 batch_entry['vis_attention_mask'] = vis_attention_mask
                 batch_entry['img_id'] = img_ids
 
-            batch_entry['input_text'] = np.array(input_text)
+            # batch_entry['input_text'] = np.array(input_text)
 
             batch_entry['targets'] = targets
 
@@ -470,8 +471,8 @@ class VSD_3D_FineTuneDataset(Dataset):
                 if 'target_ids' in entry['out_dict']:
                     target_ids[i, :entry['out_dict']['target_length']] = entry['out_dict']['target_ids']
 
-                if 'input_text' in entry['out_dict']:
-                    input_text.append(entry['out_dict']['input_text'])
+                # if 'input_text' in entry['out_dict']:
+                #     input_text.append(entry['out_dict']['input_text'])
 
                 sentences.append(entry['out_dict']['sent'])
 
@@ -497,7 +498,7 @@ class VSD_3D_FineTuneDataset(Dataset):
                 batch_entry['vis_attention_mask'] = vis_attention_mask
                 batch_entry['img_id'] = img_ids
 
-            batch_entry['input_text'] = np.array(input_text)
+            # batch_entry['input_text'] = np.array(input_text)
 
             batch_entry['targets'] = targets
 

@@ -153,9 +153,14 @@ class VLBart3DVSD(VLBart):
         self.bce_loss = nn.BCEWithLogitsLoss()
 
     def train_step(self, batch, r_G):
-
+        self.eval()
+        if r_G is None:
+            kwargs = {}
+        else:
+            kwargs = {'r_G':r_G}
         device = next(self.parameters()).device
         vis_feats = batch['vis_feats'].to(device)
+        batch = batch['batch_entry']
         input_ids = batch['input_ids'].to(device)
         vis_pos = batch['boxes'].to(device)
 
@@ -191,7 +196,8 @@ class VLBart3DVSD(VLBart):
                 input_ids=input_ids,
                 vis_inputs=(vis_feats, vis_pos),
                 labels=lm_labels,
-                return_dict=True
+                return_dict=True,
+                **kwargs
             )
             assert 'loss' in output
 
@@ -204,7 +210,7 @@ class VLBart3DVSD(VLBart):
 
             loss = loss.sum(dim=1) / lm_mask.sum(dim=1).clamp(min=1)  # B
 
-            loss = loss * batch['scores'].to(device=device)
+            # loss = loss * batch['scores'].to(device=device)
 
             loss = loss.mean()
 
