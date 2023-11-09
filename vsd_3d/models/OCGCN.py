@@ -80,10 +80,8 @@ class OcGCN(nn.Module):
         return vision, s_e
 
     def preprocess(self, data, vision, adjacency_matrix):
-        obj_conf = data['obj_conf']
         centroid = data['centroid']
-        device = obj_conf.device
-        B, N = obj_conf.shape
+        B, N, _ = centroid.shape
 
         pose_index = self.oritation2int(data['basis'], data['coeffs'], self.pose_emb.weight.shape[0]) # 根据物体的姿态和大小确定方向朝向
         pose = self.pose_emb(pose_index.int())
