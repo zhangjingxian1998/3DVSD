@@ -275,7 +275,7 @@ class Trainer(TrainerBase):
                     self.save("BEST")
 
                 log_str = ''
-                log_str += "\nEpoch %d: Valid Raw %0.2f Topk %0.2f" % (epoch, valid_score)
+                log_str += "\nEpoch %d: Valid Raw %0.2f" % (epoch, valid_score)
                 log_str += "\nEpoch %d: Best Raw %0.2f\n" % (best_epoch, best_valid)
 
                 # wandb_log_dict = {}
@@ -356,8 +356,7 @@ class Trainer(TrainerBase):
             if self.verbose:
                 pbar = tqdm(total=len(loader), ncols=120, desc="Prediction")
             for i, batch in enumerate(loader):
-                r_G = None
-                text_prompt = self.vsd_3d_encoder(self.args, batch)
+                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
                     results = self.model.module.test_step(batch, r_G)
@@ -366,7 +365,7 @@ class Trainer(TrainerBase):
 
                 pred_ans = results['pred_ans']
                 # ques_ids = batch['question_ids']
-                ques_ids = batch['batch_entry']['targets']
+                ques_ids = batch['batch_entry']['sentences']
 
                 for qid, ans in zip(ques_ids, pred_ans):
                     target.append(qid)

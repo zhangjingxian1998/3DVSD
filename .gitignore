@@ -10,3 +10,4 @@ VL-T5/t5-base
 *.pyc
 __pycache__
 VL-T5/bart-base
+*.pth

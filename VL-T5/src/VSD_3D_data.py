@@ -111,19 +111,21 @@ class VSD_3D_FineTuneDataset(Dataset):
                         'subject_and_objects': [[triple['s'], triple['p'], triple['o']] for triple in datum['triple_list']],
                         "predicate": [triple['p'] for triple in datum['triple_list']],
                         'targets': [caption.strip() for caption in datum['captions']],
-                        "so_bbox": [[triple['s_bbox'], triple['o_bbox']] for triple in datum['triple_list']],
+                        # "so_bbox": [[triple['s_bbox'], triple['o_bbox']] for triple in datum['triple_list']],
                         'is_train': True
                     }
                     data.append(new_datum)
             else:
-                new_datum = {
-                    'img_id': img_id,
-                    # 'subject_and_objects': [(triple['s'], triple['o']) for triple in datum['triple_list']],
-                    'subject_and_objects': [[triple['s'], triple['p'], triple['o']] for triple in datum['triple_list']],
-                    'targets': [caption.strip() for caption in datum['captions']],
-                    "so_bbox": [[triple['s_bbox'], triple['o_bbox']] for triple in datum['triple_list']],
-                    'is_train': False
-                }
+                for d in datum['captions']:
+                    new_datum = {
+                        'img_id': img_id,
+                        'sent': d.strip(),
+                        # 'subject_and_objects': [(triple['s'], triple['o']) for triple in datum['triple_list']],
+                        'subject_and_objects': [[triple['s'], triple['p'], triple['o']] for triple in datum['triple_list']],
+                        'targets': [caption.strip() for caption in datum['captions']],
+                        # "so_bbox": [[triple['s_bbox'], triple['o_bbox']] for triple in datum['triple_list']],
+                        'is_train': False
+                    }
                 data.append(new_datum)
                 n_images += 1
                 
@@ -345,16 +347,16 @@ class VSD_3D_FineTuneDataset(Dataset):
             # out_dict['input_ids'] = torch.LongTensor(input_ids)
             # out_dict['input_length'] = len(input_ids)
             
-            if datum['is_train']:
-                sent = datum['sent'].strip()
-                if 't5' in self.args.tokenizer:
-                    target_ids = self.tokenizer.encode(sent, max_length=self.args.gen_max_length, truncation=True)
-                elif 'bart' in self.args.tokenizer:
-                    target_ids = self.tokenizer.encode(sent, max_length=self.args.gen_max_length, truncation=True)
+            # if datum['is_train']:
+            sent = datum['sent'].strip()
+            if 't5' in self.args.tokenizer:
+                target_ids = self.tokenizer.encode(sent, max_length=self.args.gen_max_length, truncation=True)
+            elif 'bart' in self.args.tokenizer:
+                target_ids = self.tokenizer.encode(sent, max_length=self.args.gen_max_length, truncation=True)
 
-                out_dict['sent'] = sent
-                out_dict['target_ids'] = torch.LongTensor(target_ids)
-                out_dict['target_length'] = len(target_ids)
+            out_dict['sent'] = sent
+            out_dict['target_ids'] = torch.LongTensor(target_ids)
+            out_dict['target_length'] = len(target_ids)
 
             if 'targets' in datum:
                 out_dict['targets'] = datum['targets']

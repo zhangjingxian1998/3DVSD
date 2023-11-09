@@ -161,104 +161,104 @@ class Trainer(TrainerBase):
             time_start = time.time()
             # split_word = '<extra_id_99>'
             # split_id = self.tokenizer.encode(split_word, return_tensors="pt", add_special_tokens=False)
-            for step_i, batch in enumerate(self.train_loader):
-                time_0 = time.time()
-                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
-                #####################################################################################
-                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
-                time_1 = time.time()
+            # for step_i, batch in enumerate(self.train_loader):
+            #     time_0 = time.time()
+            #     r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
+            #     #####################################################################################
+            #     batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
+            #     time_1 = time.time()
 
-                # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
-                # batch['batch_entry']['input_ids'] = self.text_process(batch,split_word, split_id, text_prompt)
-                # 输出的vsd_3d_result应该包括： 
-                # r_G: 用作后续VL模型中的decoder做cross_attention
-                # 子图的额外类类名，用作填进提示词中 # 如果没有额外的类应该怎么办
-                # 预测出来的关系，用于填进提示词中
-                # 到此，提示词填充完毕，应将提示词tolist(), 用' '拼接，转为相应的input_ids
-                # 还有边得分的损失
-                if self.args.fp16 and _use_native_amp:
-                    with autocast():
-                        if self.args.distributed:
-                            results = self.model.module.train_step(batch,r_G)
-                        else:
-                            results = self.model.train_step(batch,r_G)
-                else:
-                    if self.args.distributed:
-                        results = self.model.module.train_step(batch,r_G)
-                        time_2 = time.time()
-                    else:
-                        results = self.model.train_step(batch, r_G)
-                        time_2 = time.time()
+            #     # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
+            #     # batch['batch_entry']['input_ids'] = self.text_process(batch,split_word, split_id, text_prompt)
+            #     # 输出的vsd_3d_result应该包括： 
+            #     # r_G: 用作后续VL模型中的decoder做cross_attention
+            #     # 子图的额外类类名，用作填进提示词中 # 如果没有额外的类应该怎么办
+            #     # 预测出来的关系，用于填进提示词中
+            #     # 到此，提示词填充完毕，应将提示词tolist(), 用' '拼接，转为相应的input_ids
+            #     # 还有边得分的损失
+            #     if self.args.fp16 and _use_native_amp:
+            #         with autocast():
+            #             if self.args.distributed:
+            #                 results = self.model.module.train_step(batch,r_G)
+            #             else:
+            #                 results = self.model.train_step(batch,r_G)
+            #     else:
+            #         if self.args.distributed:
+            #             results = self.model.module.train_step(batch,r_G)
+            #             time_2 = time.time()
+            #         else:
+            #             results = self.model.train_step(batch, r_G)
+            #             time_2 = time.time()
                         
 
-                loss = results['loss'] + score_loss
+            #     loss = results['loss'] + score_loss
 
-                if self.args.fp16 and _use_native_amp:
-                    self.scaler.scale(loss).backward()
-                elif self.args.fp16 and _use_apex:
-                    with amp.scale_loss(loss, self.optim) as scaled_loss:
-                        scaled_loss.backward()
-                else:
-                    loss.backward()
+            #     if self.args.fp16 and _use_native_amp:
+            #         self.scaler.scale(loss).backward()
+            #     elif self.args.fp16 and _use_apex:
+            #         with amp.scale_loss(loss, self.optim) as scaled_loss:
+            #             scaled_loss.backward()
+            #     else:
+            #         loss.backward()
 
-                loss = loss.detach()
+            #     loss = loss.detach()
 
-                # Update Parameters
-                if self.args.clip_grad_norm > 0:
-                    if self.args.fp16 and _use_native_amp:
-                        self.scaler.unscale_(self.optim)
-                        torch.nn.utils.clip_grad_norm_(
-                            self.model.parameters(), self.args.clip_grad_norm)
-                    elif self.args.fp16 and _use_apex:
-                        torch.nn.utils.clip_grad_norm_(amp.master_params(
-                            self.optim), self.args.clip_grad_norm)
-                    else:
-                        torch.nn.utils.clip_grad_norm_(
-                            self.model.parameters(), self.args.clip_grad_norm)
+            #     # Update Parameters
+            #     if self.args.clip_grad_norm > 0:
+            #         if self.args.fp16 and _use_native_amp:
+            #             self.scaler.unscale_(self.optim)
+            #             torch.nn.utils.clip_grad_norm_(
+            #                 self.model.parameters(), self.args.clip_grad_norm)
+            #         elif self.args.fp16 and _use_apex:
+            #             torch.nn.utils.clip_grad_norm_(amp.master_params(
+            #                 self.optim), self.args.clip_grad_norm)
+            #         else:
+            #             torch.nn.utils.clip_grad_norm_(
+            #                 self.model.parameters(), self.args.clip_grad_norm)
 
-                if self.args.fp16 and _use_native_amp:
-                    self.scaler.step(self.optim)
-                    self.scaler.update()
-                else:
-                    self.optim.step()
+            #     if self.args.fp16 and _use_native_amp:
+            #         self.scaler.step(self.optim)
+            #         self.scaler.update()
+            #     else:
+            #         self.optim.step()
 
-                if self.lr_scheduler:
-                    self.lr_scheduler.step()
-                for param in self.model.parameters():
-                    param.grad = None
+            #     if self.lr_scheduler:
+            #         self.lr_scheduler.step()
+            #     for param in self.model.parameters():
+            #         param.grad = None
 
-                global_step += 1
+            #     global_step += 1
 
-                for k, v in results.items():
-                    if k in epoch_results:
-                        epoch_results[k] += v.item()
+            #     for k, v in results.items():
+            #         if k in epoch_results:
+            #             epoch_results[k] += v.item()
 
-                if self.lr_scheduler:
-                    if version.parse(torch.__version__) >= version.parse("1.4"):
-                        lr = self.lr_scheduler.get_last_lr()[0]
-                    else:
-                        lr = self.lr_scheduler.get_lr()[0]
-                else:
-                    try:
-                        lr = self.optim.get_lr()[0]
-                    except AttributeError:
-                        lr = self.args.lr
+            #     if self.lr_scheduler:
+            #         if version.parse(torch.__version__) >= version.parse("1.4"):
+            #             lr = self.lr_scheduler.get_last_lr()[0]
+            #         else:
+            #             lr = self.lr_scheduler.get_lr()[0]
+            #     else:
+            #         try:
+            #             lr = self.optim.get_lr()[0]
+            #         except AttributeError:
+            #             lr = self.args.lr
 
-                if self.verbose:
-                    loss_meter.update(loss.item())
-                    desc_str = f'Epoch {epoch} | LR {lr:.6f}'
-                    desc_str += f' | Loss {loss_meter.val:4f}'
+            #     if self.verbose:
+            #         loss_meter.update(loss.item())
+            #         desc_str = f'Epoch {epoch} | LR {lr:.6f}'
+            #         desc_str += f' | Loss {loss_meter.val:4f}'
 
-                    pbar.set_description(desc_str)
-                    pbar.update(1)
+            #         pbar.set_description(desc_str)
+            #         pbar.update(1)
 
-                if self.args.distributed:
-                    dist.barrier()
-                print('加载数据集耗时:',time_0-time_start)
-                print('vsd3d网络处理耗时:',time_1-time_0)
-                print('VL网络处理耗时:',time_2-time_1)
-                time_start = time.time()
-                print('反向传播耗时:',time_start-time_0)
+            #     if self.args.distributed:
+            #         dist.barrier()
+            #     print('加载数据集耗时:',time_0-time_start)
+            #     print('vsd3d网络处理耗时:',time_1-time_0)
+            #     print('VL网络处理耗时:',time_2-time_1)
+            #     time_start = time.time()
+            #     print('反向传播耗时:',time_start-time_0)
                 
 
             if self.verbose:
@@ -268,15 +268,14 @@ class Trainer(TrainerBase):
             score_dict = self.evaluate(self.val_loader)
 
             if self.verbose:
-                valid_score = score_dict['topk_score'] * 100.
-                valid_score_raw = score_dict['overall']
-                if valid_score_raw > best_valid or epoch == 0:
-                    best_valid = valid_score_raw
+                valid_score = score_dict['CIDEr'] * 100.
+                if valid_score > best_valid or epoch == 0:
+                    best_valid = valid_score
                     best_epoch = epoch
                     self.save("BEST")
 
                 log_str = ''
-                log_str += "\nEpoch %d: Valid Raw %0.2f Topk %0.2f" % (epoch, valid_score_raw, valid_score)
+                log_str += "\nEpoch %d: Valid Raw %0.2f" % (epoch, valid_score)
                 log_str += "\nEpoch %d: Best Raw %0.2f\n" % (best_epoch, best_valid)
 
                 # wandb_log_dict = {}
@@ -305,17 +304,17 @@ class Trainer(TrainerBase):
         best_path = os.path.join(self.args.output, 'BEST')
         self.load(best_path)
 
-        quesid2ans = self.predict(self.test_loader)
+        target, answer = self.predict(self.test_loader)
 
         if self.verbose:
             evaluator = self.test_loader.evaluator
             score_dict = evaluator.evaluate(quesid2ans)
 
-            evaluator.dump_result(quesid2ans)
+            # evaluator.dump_result(quesid2ans)
 
-            acc_dict_all = evaluator.evaluate_raw(quesid2ans)
-            acc_dict_answerable = evaluator.evaluate_raw(quesid2ans, is_topk_optimal=True)
-            acc_dict_unanswerable = evaluator.evaluate_raw(quesid2ans, is_topk_optimal=False)
+            # acc_dict_all = evaluator.evaluate_raw(quesid2ans)
+            # acc_dict_answerable = evaluator.evaluate_raw(quesid2ans, is_topk_optimal=True)
+            # acc_dict_unanswerable = evaluator.evaluate_raw(quesid2ans, is_topk_optimal=False)
 
             # wandb_log_dict = {}
             # wandb_log_dict['Test/overall'] = acc_dict_all['overall']
@@ -332,9 +331,9 @@ class Trainer(TrainerBase):
             # print(wandb_log_dict)
             # wandb.log(wandb_log_dict)
 
-        if self.args.submit:
-            dump_path = os.path.join(self.args.output, 'submit.json')
-            self.predict(self.submit_test_loader, dump_path)
+        # if self.args.submit:
+        #     dump_path = os.path.join(self.args.output, 'submit.json')
+        #     self.predict(self.submit_test_loader, dump_path)
 
             # wandb.save(dump_path, base_path=self.args.output)
             # wandb.log({'finished': True})
@@ -346,20 +345,32 @@ class Trainer(TrainerBase):
     def predict(self, loader, dump_path=None):
         self.model.eval()
         with torch.no_grad():
+
+            gen_kwargs = {}
+            gen_kwargs['num_beams'] = self.args.num_beams
+            gen_kwargs['max_length'] = self.args.gen_max_length
+
             quesid2ans = {}
+            target = []
+            answer = []
             if self.verbose:
                 pbar = tqdm(total=len(loader), ncols=120, desc="Prediction")
             for i, batch in enumerate(loader):
+                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
+                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
-                    results = self.model.module.test_step(batch)
+                    results = self.model.module.test_step(batch, r_G)
                 else:
-                    results = self.model.test_step(batch)
+                    results = self.model.test_step(batch, r_G)
 
                 pred_ans = results['pred_ans']
-                ques_ids = batch['question_ids']
+                # ques_ids = batch['question_ids']
+                ques_ids = batch['batch_entry']['sentences']
 
                 for qid, ans in zip(ques_ids, pred_ans):
-                    quesid2ans[qid] = ans
+                    target.append(qid)
+                    answer.append(ans)
+                    # quesid2ans[qid] = ans
 
                 if self.verbose:
                     pbar.update(1)
@@ -370,27 +381,31 @@ class Trainer(TrainerBase):
         if self.args.distributed:
             dist.barrier()
 
-        qid2ans_list = dist_utils.all_gather(quesid2ans)
-        if self.verbose:
-            quesid2ans = {}
-            for qid2ans in qid2ans_list:
-                for k, v in qid2ans.items():
-                    quesid2ans[k] = v
+        # qid2ans_list = dist_utils.all_gather(quesid2ans)
+        # if self.verbose:
+        #     quesid2ans = {}
+        #     for qid2ans in qid2ans_list:
+        #         for k, v in qid2ans.items():
+        #             quesid2ans[k] = v
 
-            if dump_path is not None:
-                evaluator = loader.evaluator
-                evaluator.dump_result(quesid2ans, dump_path)
+        #     if dump_path is not None:
+        #         evaluator = loader.evaluator
+        #         evaluator.dump_result(quesid2ans, dump_path)
 
-        return quesid2ans
+        # return quesid2ans
+        return target, answer
 
     def evaluate(self, loader, dump_path=None):
-        quesid2ans = self.predict(loader, dump_path)
+        # quesid2ans = self.predict(loader, dump_path)
+        target, answer = self.predict(loader, dump_path)
 
         if self.verbose:
             evaluator = loader.evaluator
-            acc_dict = evaluator.evaluate_raw(quesid2ans)
-            topk_score = evaluator.evaluate(quesid2ans)
-            acc_dict['topk_score'] = topk_score
+            # acc_dict = evaluator.evaluate_raw(quesid2ans)
+            acc_dict = {}
+            topk_score = evaluator.evaluate(target, answer)
+            # topk_score = evaluator.evaluate(quesid2ans)
+            acc_dict['CIDEr'] = topk_score['CIDEr']
 
             return acc_dict
     
@@ -554,10 +569,10 @@ if __name__ == "__main__":
     args.lr = 5e-5
     args.epochs = 20
     args.num_workers = 4
-    # args.backbone = 'VL-T5/t5-base'
-    # args.load = 'VL-T5/snap/pretrain/VLT5/Epoch30'
-    args.backbone = 'VL-T5/bart-base'
-    args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
+    args.backbone = 'VL-T5/t5-base'
+    args.load = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/pretrain/VLT5/BEST'
+    # args.backbone = 'VL-T5/bart-base'
+    # args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
     # args.output = 'VL-T5/snap/sp/baseline/test'
     # args.load = None
     args.num_beams = 5

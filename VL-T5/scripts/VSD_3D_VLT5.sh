@@ -15,7 +15,7 @@ python -m torch.distributed.launch \
         --optim adamw \
         --warmup_ratio 0.05 \
         --lr 5e-5 \
-        --epochs 100 \
+        --epochs 20 \
         --num_workers 16 \
         --max_text_length 40 \
         --clip_grad_norm 1.0 \

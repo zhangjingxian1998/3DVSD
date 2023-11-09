@@ -183,6 +183,7 @@ class JointEncoder(T5Stack):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        r_G=None
     ):
 
         if inputs_embeds is None:
