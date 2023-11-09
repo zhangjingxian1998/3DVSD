@@ -227,9 +227,9 @@ class VLBart3DVSD(VLBart):
             kwargs = {}
         else:
             kwargs = {'r_G':r_G}
-        batch = batch['batch_entry']
         device = next(self.parameters()).device
         vis_feats = batch['vis_feats'].to(device)
+        batch = batch['batch_entry']
         input_ids = batch['input_ids'].to(device)
         vis_pos = batch['boxes'].to(device)
 

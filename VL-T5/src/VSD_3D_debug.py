@@ -158,15 +158,15 @@ class Trainer(TrainerBase):
             }
 
             quesid2ans = {}
-            # time_start = time.time()
+            time_start = time.time()
             # split_word = '<extra_id_99>'
             # split_id = self.tokenizer.encode(split_word, return_tensors="pt", add_special_tokens=False)
             for step_i, batch in enumerate(self.train_loader):
-                # time_0 = time.time()
+                time_0 = time.time()
                 r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
                 #####################################################################################
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
-                # time_1 = time.time()
+                time_1 = time.time()
 
                 # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
                 # batch['batch_entry']['input_ids'] = self.text_process(batch,split_word, split_id, text_prompt)
@@ -185,10 +185,10 @@ class Trainer(TrainerBase):
                 else:
                     if self.args.distributed:
                         results = self.model.module.train_step(batch,r_G)
-                        # time_2 = time.time()
+                        time_2 = time.time()
                     else:
                         results = self.model.train_step(batch, r_G)
-                        # time_2 = time.time()
+                        time_2 = time.time()
                         
 
                 loss = results['loss'] + score_loss
@@ -254,11 +254,11 @@ class Trainer(TrainerBase):
 
                 if self.args.distributed:
                     dist.barrier()
-                # print('加载数据集耗时:',time_0-time_start)
-                # print('vsd3d网络处理耗时:',time_1-time_0)
-                # print('VL网络处理耗时:',time_2-time_1)
-                # time_start = time.time()
-                # print('反向传播耗时:',time_start-time_0)
+                print('加载数据集耗时:',time_0-time_start)
+                print('vsd3d网络处理耗时:',time_1-time_0)
+                print('VL网络处理耗时:',time_2-time_1)
+                time_start = time.time()
+                print('反向传播耗时:',time_start-time_0)
                 
 
             if self.verbose:
@@ -268,14 +268,15 @@ class Trainer(TrainerBase):
             score_dict = self.evaluate(self.val_loader)
 
             if self.verbose:
-                valid_score = score_dict['CIDEr'] * 100.
-                if valid_score > best_valid or epoch == 0:
-                    best_valid = valid_score
+                valid_score = score_dict['topk_score'] * 100.
+                valid_score_raw = score_dict['overall']
+                if valid_score_raw > best_valid or epoch == 0:
+                    best_valid = valid_score_raw
                     best_epoch = epoch
                     self.save("BEST")
 
                 log_str = ''
-                log_str += "\nEpoch %d: Valid Raw %0.2f Topk %0.2f" % (epoch, valid_score)
+                log_str += "\nEpoch %d: Valid Raw %0.2f Topk %0.2f" % (epoch, valid_score_raw, valid_score)
                 log_str += "\nEpoch %d: Best Raw %0.2f\n" % (best_epoch, best_valid)
 
                 # wandb_log_dict = {}
@@ -304,17 +305,17 @@ class Trainer(TrainerBase):
         best_path = os.path.join(self.args.output, 'BEST')
         self.load(best_path)
 
-        target, answer = self.predict(self.test_loader)
+        quesid2ans = self.predict(self.test_loader)
 
         if self.verbose:
             evaluator = self.test_loader.evaluator
-            score_dict = evaluator.evaluate(target, answer)
+            score_dict = evaluator.evaluate(quesid2ans)
 
-            # evaluator.dump_result(quesid2ans)
+            evaluator.dump_result(quesid2ans)
 
-            # acc_dict_all = evaluator.evaluate_raw(quesid2ans)
-            # acc_dict_answerable = evaluator.evaluate_raw(quesid2ans, is_topk_optimal=True)
-            # acc_dict_unanswerable = evaluator.evaluate_raw(quesid2ans, is_topk_optimal=False)
+            acc_dict_all = evaluator.evaluate_raw(quesid2ans)
+            acc_dict_answerable = evaluator.evaluate_raw(quesid2ans, is_topk_optimal=True)
+            acc_dict_unanswerable = evaluator.evaluate_raw(quesid2ans, is_topk_optimal=False)
 
             # wandb_log_dict = {}
             # wandb_log_dict['Test/overall'] = acc_dict_all['overall']
@@ -331,9 +332,9 @@ class Trainer(TrainerBase):
             # print(wandb_log_dict)
             # wandb.log(wandb_log_dict)
 
-        # if self.args.submit:
-        #     dump_path = os.path.join(self.args.output, 'submit.json')
-        #     self.predict(self.submit_test_loader, dump_path)
+        if self.args.submit:
+            dump_path = os.path.join(self.args.output, 'submit.json')
+            self.predict(self.submit_test_loader, dump_path)
 
             # wandb.save(dump_path, base_path=self.args.output)
             # wandb.log({'finished': True})
@@ -345,33 +346,20 @@ class Trainer(TrainerBase):
     def predict(self, loader, dump_path=None):
         self.model.eval()
         with torch.no_grad():
-
-            gen_kwargs = {}
-            gen_kwargs['num_beams'] = self.args.num_beams
-            gen_kwargs['max_length'] = self.args.gen_max_length
-
             quesid2ans = {}
-            target = []
-            answer = []
             if self.verbose:
                 pbar = tqdm(total=len(loader), ncols=120, desc="Prediction")
             for i, batch in enumerate(loader):
-                r_G = None
-                text_prompt = self.vsd_3d_encoder(self.args, batch)
-                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
-                    results = self.model.module.test_step(batch, r_G)
+                    results = self.model.module.test_step(batch)
                 else:
-                    results = self.model.test_step(batch, r_G)
+                    results = self.model.test_step(batch)
 
                 pred_ans = results['pred_ans']
-                # ques_ids = batch['question_ids']
-                ques_ids = batch['batch_entry']['targets']
+                ques_ids = batch['question_ids']
 
                 for qid, ans in zip(ques_ids, pred_ans):
-                    target.append(qid)
-                    answer.append(ans)
-                    # quesid2ans[qid] = ans
+                    quesid2ans[qid] = ans
 
                 if self.verbose:
                     pbar.update(1)
@@ -382,31 +370,27 @@ class Trainer(TrainerBase):
         if self.args.distributed:
             dist.barrier()
 
-        # qid2ans_list = dist_utils.all_gather(quesid2ans)
-        # if self.verbose:
-        #     quesid2ans = {}
-        #     for qid2ans in qid2ans_list:
-        #         for k, v in qid2ans.items():
-        #             quesid2ans[k] = v
+        qid2ans_list = dist_utils.all_gather(quesid2ans)
+        if self.verbose:
+            quesid2ans = {}
+            for qid2ans in qid2ans_list:
+                for k, v in qid2ans.items():
+                    quesid2ans[k] = v
 
-        #     if dump_path is not None:
-        #         evaluator = loader.evaluator
-        #         evaluator.dump_result(quesid2ans, dump_path)
+            if dump_path is not None:
+                evaluator = loader.evaluator
+                evaluator.dump_result(quesid2ans, dump_path)
 
-        # return quesid2ans
-        return target, answer
+        return quesid2ans
 
     def evaluate(self, loader, dump_path=None):
-        # quesid2ans = self.predict(loader, dump_path)
-        target, answer = self.predict(loader, dump_path)
+        quesid2ans = self.predict(loader, dump_path)
 
         if self.verbose:
             evaluator = loader.evaluator
-            # acc_dict = evaluator.evaluate_raw(quesid2ans)
-            acc_dict = {}
-            topk_score = evaluator.evaluate(target, answer)
-            # topk_score = evaluator.evaluate(quesid2ans)
-            acc_dict['CIDEr'] = topk_score['CIDEr']
+            acc_dict = evaluator.evaluate_raw(quesid2ans)
+            topk_score = evaluator.evaluate(quesid2ans)
+            acc_dict['topk_score'] = topk_score
 
             return acc_dict
     
@@ -474,10 +458,10 @@ def main_worker(gpu, args, total3d_model, vsd_3d_encoder):
     print(f'Process Launching at GPU {gpu}')
 
     if args.distributed:
-        # os.environ['RANK'] = '0'
-        # os.environ['WORLD_SIZE'] = '1'
-        # os.environ['MASTER_ADDR'] = 'localhost'
-        # os.environ['MASTER_PORT'] = '12346'
+        os.environ['RANK'] = '0'
+        os.environ['WORLD_SIZE'] = '1'
+        os.environ['MASTER_ADDR'] = 'localhost'
+        os.environ['MASTER_PORT'] = '12346'
         torch.cuda.set_device(args.gpu)
         dist.init_process_group(backend='nccl')
 
@@ -555,6 +539,34 @@ if __name__ == "__main__":
 
     # build 3dvsd encoder
     vsd_3d_encoder = Model()
+
+    ##############################################
+    # --distributed 
+    # --multiGPU
+    args.distributed = True
+    args.multiGPU = True
+    args.train = 'train'
+    args.valid = 'val'
+    args.test = 'test'
+    args.optim = 'adamw'
+    args.warmup_ratio = 0.1
+    args.clip_grad_norm = 5
+    args.lr = 5e-5
+    args.epochs = 20
+    args.num_workers = 4
+    # args.backbone = 'VL-T5/t5-base'
+    # args.load = 'VL-T5/snap/pretrain/VLT5/Epoch30'
+    args.backbone = 'VL-T5/bart-base'
+    args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
+    # args.output = 'VL-T5/snap/sp/baseline/test'
+    # args.load = None
+    args.num_beams = 5
+    args.batch_size = 32
+    args.valid_batch_size = 100
+    args.local_rank = 0
+    args.max_text_length = 40
+    ##############################################
+
 
     # if args.local_rank in [0, -1]:
     #     print(args)

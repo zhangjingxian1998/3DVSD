@@ -83,6 +83,7 @@ class Model(nn.Module):
             # TODO 更改获取中心规则, 根据flag的不同来
             calculate_center, extral_flag_3_center = self.extra_center(data, subgraph, flag)
             direction_list = self.calculate_direction(calculate_center)
+            direction_list_extral = None
             if extral_flag_3_center.shape[0]:
                 direction_list_extral = self.calculate_direction(extral_flag_3_center)
 

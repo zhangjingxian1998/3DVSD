@@ -486,7 +486,7 @@ class VLT5(T5ForConditionalGeneration):
         if 'r_G' in kwargs.keys():
             r_G_mask = torch.ones([B,1]).to(attention_mask.device)
             encoder_attention_mask = torch.cat([r_G_mask, attention_mask, vis_attention_mask], dim=1)
-            hidden_states = torch.cat([kwargs['r_G'], hidden_states], dim=-2)
+            hidden_states = torch.cat([kwargs['r_G'], hidden_states], dim=1)
         else:
             encoder_attention_mask = torch.cat([attention_mask, vis_attention_mask], dim=1)
         # Decode

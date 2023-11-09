@@ -169,69 +169,86 @@ class TrainerBase(object):
         return optim, lr_scheduler
 
     def load_checkpoint(self, ckpt_path):
-        if 't5' in self.args.backbone:
-            origin_different_keys = [
-                'shared.weight',
-                'encoder.embed_tokens.weight',
-                'vis_encoder.visual_embedding.obj_order_embedding.weight',
-                'decoder.embed_tokens.weight',
-                'lm_head.weight'
-            ]
-            origin_different_weigt = [
-                self.model.shared.weight,
-                self.model.encoder.embed_tokens.weight,
-                self.model.encoder.visual_embedding.obj_order_embedding.weight,
-                self.model.decoder.embed_tokens.weight,
-                self.model.lm_head.weight
-            ]
-            state_dict = load_state_dict(ckpt_path, 'cpu')
-            D = state_dict['shared.weight'].shape[0]
+        if self.args.VL_pretrain:
+            if 't5' in self.args.backbone:
+                origin_different_keys = [
+                    'shared.weight',
+                    'encoder.embed_tokens.weight',
+                    'vis_encoder.visual_embedding.obj_order_embedding.weight',
+                    'decoder.embed_tokens.weight',
+                    'lm_head.weight'
+                ]
+                origin_different_weigt = [
+                    self.model.shared.weight,
+                    self.model.encoder.embed_tokens.weight,
+                    self.model.encoder.visual_embedding.obj_order_embedding.weight,
+                    self.model.decoder.embed_tokens.weight,
+                    self.model.lm_head.weight
+                ]
+                state_dict = load_state_dict(ckpt_path, 'cpu')
+                D = state_dict['shared.weight'].shape[0]
 
-            for i, key in enumerate(origin_different_keys):
-                origin_different_weigt[i].data[:D] = state_dict[key]
-                state_dict[key] = origin_different_weigt[i].data
-
-            original_keys = list(state_dict.keys())
-            for key in original_keys:
-                if key.startswith("vis_encoder."):
-                    new_key = 'encoder.' + key[len("vis_encoder."):]
-                    state_dict[new_key] = state_dict.pop(key)
-
-                if key.startswith("model.vis_encoder."):
-                    new_key = 'model.encoder.' + key[len("model.vis_encoder."):]
-                    state_dict[new_key] = state_dict.pop(key)
-
-            results = self.model.load_state_dict(state_dict, strict=False)
-            if self.verbose:
-                print('Model loaded from ', ckpt_path)
-                pprint(results)
-        elif 'bart' in self.args.backbone:
-            origin_different_keys = [
-                'model.shared.weight',
-                'final_logits_bias',
-                'model.encoder.embed_tokens.weight',
-                'model.vis_encoder.visual_embedding.obj_order_embedding.weight',
-                'model.decoder.embed_tokens.weight',
-                'lm_head.weight'
-            ]
-            origin_different_weigt = [
-                self.model.model.shared.weight,
-                self.model.final_logits_bias,
-                self.model.model.encoder.embed_tokens.weight,
-                self.model.model.encoder.visual_embedding.obj_order_embedding.weight,
-                self.model.model.decoder.embed_tokens.weight,
-                self.model.lm_head.weight
-            ]
-            state_dict = load_state_dict(ckpt_path, 'cpu')
-            D = state_dict['model.shared.weight'].shape[0]
-            for i, key in enumerate(origin_different_keys):
-                if key == 'final_logits_bias':
-                    origin_different_weigt[i].data[0, :D] = state_dict[key]
-                    state_dict[key] = origin_different_weigt[i].data
-                else:
+                for i, key in enumerate(origin_different_keys):
                     origin_different_weigt[i].data[:D] = state_dict[key]
                     state_dict[key] = origin_different_weigt[i].data
-            
+
+                original_keys = list(state_dict.keys())
+                for key in original_keys:
+                    if key.startswith("vis_encoder."):
+                        new_key = 'encoder.' + key[len("vis_encoder."):]
+                        state_dict[new_key] = state_dict.pop(key)
+
+                    if key.startswith("model.vis_encoder."):
+                        new_key = 'model.encoder.' + key[len("model.vis_encoder."):]
+                        state_dict[new_key] = state_dict.pop(key)
+
+                results = self.model.load_state_dict(state_dict, strict=False)
+                if self.verbose:
+                    print('Model loaded from ', ckpt_path)
+                    pprint(results)
+            elif 'bart' in self.args.backbone:
+                origin_different_keys = [
+                    'model.shared.weight',
+                    'final_logits_bias',
+                    'model.encoder.embed_tokens.weight',
+                    'model.vis_encoder.visual_embedding.obj_order_embedding.weight',
+                    'model.decoder.embed_tokens.weight',
+                    'lm_head.weight'
+                ]
+                origin_different_weigt = [
+                    self.model.model.shared.weight,
+                    self.model.final_logits_bias,
+                    self.model.model.encoder.embed_tokens.weight,
+                    self.model.model.encoder.visual_embedding.obj_order_embedding.weight,
+                    self.model.model.decoder.embed_tokens.weight,
+                    self.model.lm_head.weight
+                ]
+                state_dict = load_state_dict(ckpt_path, 'cpu')
+                D = state_dict['model.shared.weight'].shape[0]
+                for i, key in enumerate(origin_different_keys):
+                    if key == 'final_logits_bias':
+                        origin_different_weigt[i].data[0, :D] = state_dict[key]
+                        state_dict[key] = origin_different_weigt[i].data
+                    else:
+                        origin_different_weigt[i].data[:D] = state_dict[key]
+                        state_dict[key] = origin_different_weigt[i].data
+                
+                original_keys = list(state_dict.keys())
+                for key in original_keys:
+                    if key.startswith("vis_encoder."):
+                        new_key = 'encoder.' + key[len("vis_encoder."):]
+                        state_dict[new_key] = state_dict.pop(key)
+
+                    if key.startswith("model.vis_encoder."):
+                        new_key = 'model.encoder.' + key[len("model.vis_encoder."):]
+                        state_dict[new_key] = state_dict.pop(key)
+
+                results = self.model.load_state_dict(state_dict, strict=False)
+                if self.verbose:
+                    print('Model loaded from ', ckpt_path)
+                    pprint(results)
+        else:
+            state_dict = load_state_dict(ckpt_path, 'cpu')
             original_keys = list(state_dict.keys())
             for key in original_keys:
                 if key.startswith("vis_encoder."):
@@ -246,7 +263,6 @@ class TrainerBase(object):
             if self.verbose:
                 print('Model loaded from ', ckpt_path)
                 pprint(results)
-            pass
 
     def init_weights(self):
 

@@ -76,6 +76,10 @@ class Trainer(TrainerBase):
             if config.use_vis_order_embedding:
                 additional_special_tokens = [f'<extra_id_{i}>' for i in range(100-1, -1, -1)] + \
                         [f'<vis_extra_id_{i}>' for i in range(100-1, -1, -1)]
+                additional_special_tokens.append('<TGT>')
+                additional_special_tokens.append('<OBJ>')
+                additional_special_tokens.append('<REL>')
+                additional_special_tokens.append('<SEP>')
                 special_tokens_dict = {'additional_special_tokens': additional_special_tokens}
                 num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
 
@@ -559,9 +563,11 @@ if __name__ == "__main__":
     args.lr = 5e-5
     args.epochs = 20
     args.num_workers = 0
-    args.backbone = 'VL-T5/t5-base'
     args.output = 'VL-T5/snap/baseline/VSD_3D'
-    args.load = 'VL-T5/snap/pretrain/VLT5/Epoch30'
+    # args.backbone = 'VL-T5/t5-base'
+    # args.load = 'VL-T5/snap/pretrain/VLT5/Epoch30'
+    args.backbone = 'VL-T5/bart-base'
+    args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
     # args.load = None
     args.num_beams = 5
     args.batch_size = 32

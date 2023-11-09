@@ -368,7 +368,12 @@ class VLBartModel(BartModel):
             B, L = attention_mask.size()
             V_L = encoder_outputs[0].size(1) - L
             vis_attention_mask = attention_mask.new_ones(B, V_L)
-        encoder_attention_mask = torch.cat([attention_mask, vis_attention_mask], dim=1)
+        if 'r_G' in kwargs.keys():
+            r_G_mask = torch.ones([B,1]).to(attention_mask.device)
+            encoder_attention_mask = torch.cat([r_G_mask, attention_mask, vis_attention_mask], dim=1)
+            encoder_outputs[0] = torch.cat([kwargs['r_G'], encoder_outputs[0]], dim=1)
+        else:
+            encoder_attention_mask = torch.cat([attention_mask, vis_attention_mask], dim=1)
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(

@@ -1,5 +1,5 @@
 # The name of experiment 通过预训练, 使模型对于 <OBJ> 和 <REL> 进行学习
-name=VLT5
+name=VLBart
 
 output=VL-T5/snap/VSD_3D/pretrain/$name
 
@@ -20,9 +20,9 @@ python -m torch.distributed.launch \
         --max_text_length 40 \
         --clip_grad_norm 1.0 \
         --n_ground 4 \
-        --backbone 'VL-T5/t5-base' \
+        --backbone 'VL-T5/bart-base' \
         --output $output ${@:2} \
-        --load 'VL-T5/snap/pretrain/VLT5/Epoch30' \
+        --load 'VL-T5/snap/pretrain/VLBart/Epoch30' \
         --num_beams 5 \
         --valid_batch_size 100 \
 

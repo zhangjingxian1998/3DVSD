@@ -79,6 +79,10 @@ class Trainer(TrainerBase):
             if config.use_vis_order_embedding:
                 additional_special_tokens = [f'<extra_id_{i}>' for i in range(100-1, -1, -1)] + \
                         [f'<vis_extra_id_{i}>' for i in range(100-1, -1, -1)]
+                additional_special_tokens.append('<TGT>')
+                additional_special_tokens.append('<OBJ>')
+                additional_special_tokens.append('<REL>')
+                additional_special_tokens.append('<SEP>')
                 special_tokens_dict = {'additional_special_tokens': additional_special_tokens}
                 num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
 
@@ -395,13 +399,13 @@ class Trainer(TrainerBase):
 
     def evaluate(self, loader, dump_path=None):
         # quesid2ans = self.predict(loader, dump_path)
-        traget, answer = self.predict(loader, dump_path)
+        target, answer = self.predict(loader, dump_path)
 
         if self.verbose:
             evaluator = loader.evaluator
             # acc_dict = evaluator.evaluate_raw(quesid2ans)
             acc_dict = {}
-            topk_score = evaluator.evaluate(traget, answer)
+            topk_score = evaluator.evaluate(target, answer)
             # topk_score = evaluator.evaluate(quesid2ans)
             acc_dict['CIDEr'] = topk_score['CIDEr']
 
