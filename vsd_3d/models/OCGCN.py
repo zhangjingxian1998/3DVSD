@@ -4,17 +4,16 @@ from vsd_3d.models import FFN
 import math
 
 class OcGCN(nn.Module):
-    def __init__(self,layer_num=3):
+    def __init__(self,layer_num=3, d_prob=0.1):
         '''
     encoder部分
     '''
         super(OcGCN,self).__init__()
-        self.size_linear = nn.Linear(3,768)
-        self.ori_linear = nn.Linear(9,768)
         self.pose_emb = nn.Embedding(8,2048)
-        self.pose_linear = nn.Linear(768,768)
 
-        self.local_linear = nn.Linear(3,768)
+        # self.vison = FFN(in_feature = 2048,  # 这会使得损失值无法下降
+        #                  middle_feature = 4096, 
+        #                  out_feature = 768)
         self.vison = FFN(in_feature = 2048, 
                          middle_feature = 1024, 
                          out_feature = 768)
@@ -29,6 +28,8 @@ class OcGCN(nn.Module):
             self.Wa.append(nn.Linear(768 * 3, 768))
 
         self.sigmoid = nn.Sigmoid()
+        # self.dropout = nn.Dropout(d_prob)
+        # self.laynorm = nn.LayerNorm(768)
 
     def forward(self,x, vis_feats, adjacency_matrix):
         vision, s_e = self.preprocess(x, vis_feats, adjacency_matrix) # vision [B, N, 768] s_e [B, N, N, 768]
@@ -37,9 +38,11 @@ class OcGCN(nn.Module):
         adjacency_matrix_mask_reverse_float = 1 - adjacency_matrix_mask_float
         little_item = (torch.ones_like(adjacency_matrix_mask_float) * 1e-6) * adjacency_matrix_mask_reverse_float # 防止分母上为0导致结果为nan的情况
         
+        # vision = self.laynorm(vision)
         st_v = vision[:,0] + vision[:,1]            # sub和obj的视觉特征融合
         st_v = st_v.view(B,1,1,D).repeat(1,N,N,1)   # [B, D] --> [B, 1, 1, D] --> [B, N, N, D]
-
+        
+        # vision_res = vision
         for idx_layer in range(len(self.Wa)): # 公式2
             sj_v_ = vision.unsqueeze(1).repeat(1,N,1,1)     # [B, N, D] --> [B, 1, N, D] --> [B, N, N, D]
             a = sj_v_  + st_v
@@ -67,14 +70,17 @@ class OcGCN(nn.Module):
             vision = gama * vision                                      # 权重处理
             vision = torch.sum(vision,dim=2)                            # [B, N, N, D] --> [B, N, D]
             vision = self.sigmoid(vision)                               # 归一化
-            
+            # vision = self.laynorm(vision)
             if idx_layer == 0:
                 st_v_tmp = vision[:,0] + vision[:,1]                    # 使st_v作为上层视觉特征
                 st_v_tmp = st_v_tmp.view(B,1,1,D).repeat(1,N,N,1)       # sj_v_作为本层视觉特征
+                # vision = vision + vision_res
             else:
                 st_v = st_v_tmp
                 st_v_tmp = vision[:,0] + vision[:,1]
                 st_v_tmp = st_v_tmp.view(B,1,1,D).repeat(1,N,N,1)
+                # vision = vision + vision_res
+            
 
 
         return vision, s_e

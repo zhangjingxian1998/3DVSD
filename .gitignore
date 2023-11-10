@@ -11,3 +11,4 @@ VL-T5/t5-base
 __pycache__
 VL-T5/bart-base
 *.pth
+log

@@ -163,6 +163,10 @@ def parse_args(parse=True, **optional_kwargs):
     parser.add_argument('--comment', type=str, default='')
     parser.add_argument("--dry", action='store_true')
 
+    # Extral
+    parser.add_argument("--vsd_pretrain", action='store_true')
+    parser.add_argument("--vl_pretrain", action='store_true')
+
     # Parse the arguments.
     if parse:
         args = parser.parse_args()

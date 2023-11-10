@@ -146,16 +146,39 @@ class TrainerBase(object):
                 print("Warm up Iters: %d" % warmup_iters)
 
             no_decay = ["bias", "LayerNorm.weight"]
-            optimizer_grouped_parameters = [
-                {
-                    "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
-                    "weight_decay": self.args.weight_decay,
-                },
-                {
-                    "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
-                    "weight_decay": 0.0,
-                },
-            ]
+            if self.args.vsd_pretrain:
+                optimizer_grouped_parameters = [
+                    {
+                        "params": [p for n, p in self.vsd_3d_encoder.named_parameters() if not any(nd in n for nd in no_decay)],
+                        "weight_decay": self.args.weight_decay,
+                    },
+                ]
+            elif self.args.vl_pretrain:
+                optimizer_grouped_parameters = [
+                    {
+                        "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                        "weight_decay": self.args.weight_decay,
+                    },
+                    {
+                        "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                        "weight_decay": 0.0,
+                    },
+                ]
+            else:
+                optimizer_grouped_parameters = [
+                    {
+                        "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                        "weight_decay": self.args.weight_decay,
+                    },
+                    {
+                        "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                        "weight_decay": 0.0,
+                    },
+                    {
+                        "params": [p for n, p in self.vsd_3d_encoder.named_parameters() if not any(nd in n for nd in no_decay)],
+                        "weight_decay": self.args.weight_decay,
+                    },
+                ]
 
             optim = AdamW(optimizer_grouped_parameters,
                           lr=self.args.lr, eps=self.args.adam_eps)

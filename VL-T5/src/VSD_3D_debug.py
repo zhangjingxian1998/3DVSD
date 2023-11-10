@@ -134,6 +134,9 @@ class Trainer(TrainerBase):
     def train(self):
         device = next(self.model.parameters()).device
         self.vsd_3d_encoder = self.vsd_3d_encoder.to(device)
+        if self.args.vsd_pretrain:
+            for param in self.model.named_parameters():
+                param[1].requires_grad = False
         if self.verbose:
             loss_meter = LossMeter()
             best_valid = 0.
@@ -161,104 +164,104 @@ class Trainer(TrainerBase):
             time_start = time.time()
             # split_word = '<extra_id_99>'
             # split_id = self.tokenizer.encode(split_word, return_tensors="pt", add_special_tokens=False)
-            # for step_i, batch in enumerate(self.train_loader):
-            #     time_0 = time.time()
-            #     r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
-            #     #####################################################################################
-            #     batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
-            #     time_1 = time.time()
+            for step_i, batch in enumerate(self.train_loader):
+                time_0 = time.time()
+                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
+                #####################################################################################
+                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
+                time_1 = time.time()
 
-            #     # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
-            #     # batch['batch_entry']['input_ids'] = self.text_process(batch,split_word, split_id, text_prompt)
-            #     # 输出的vsd_3d_result应该包括： 
-            #     # r_G: 用作后续VL模型中的decoder做cross_attention
-            #     # 子图的额外类类名，用作填进提示词中 # 如果没有额外的类应该怎么办
-            #     # 预测出来的关系，用于填进提示词中
-            #     # 到此，提示词填充完毕，应将提示词tolist(), 用' '拼接，转为相应的input_ids
-            #     # 还有边得分的损失
-            #     if self.args.fp16 and _use_native_amp:
-            #         with autocast():
-            #             if self.args.distributed:
-            #                 results = self.model.module.train_step(batch,r_G)
-            #             else:
-            #                 results = self.model.train_step(batch,r_G)
-            #     else:
-            #         if self.args.distributed:
-            #             results = self.model.module.train_step(batch,r_G)
-            #             time_2 = time.time()
-            #         else:
-            #             results = self.model.train_step(batch, r_G)
-            #             time_2 = time.time()
+                # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
+                # batch['batch_entry']['input_ids'] = self.text_process(batch,split_word, split_id, text_prompt)
+                # 输出的vsd_3d_result应该包括： 
+                # r_G: 用作后续VL模型中的decoder做cross_attention
+                # 子图的额外类类名，用作填进提示词中 # 如果没有额外的类应该怎么办
+                # 预测出来的关系，用于填进提示词中
+                # 到此，提示词填充完毕，应将提示词tolist(), 用' '拼接，转为相应的input_ids
+                # 还有边得分的损失
+                if self.args.fp16 and _use_native_amp:
+                    with autocast():
+                        if self.args.distributed:
+                            results = self.model.module.train_step(batch,r_G)
+                        else:
+                            results = self.model.train_step(batch,r_G)
+                else:
+                    if self.args.distributed:
+                        results = self.model.module.train_step(batch,r_G)
+                        time_2 = time.time()
+                    else:
+                        results = self.model.train_step(batch, r_G)
+                        time_2 = time.time()
                         
 
-            #     loss = results['loss'] + score_loss
+                loss = results['loss'] + score_loss
 
-            #     if self.args.fp16 and _use_native_amp:
-            #         self.scaler.scale(loss).backward()
-            #     elif self.args.fp16 and _use_apex:
-            #         with amp.scale_loss(loss, self.optim) as scaled_loss:
-            #             scaled_loss.backward()
-            #     else:
-            #         loss.backward()
+                if self.args.fp16 and _use_native_amp:
+                    self.scaler.scale(loss).backward()
+                elif self.args.fp16 and _use_apex:
+                    with amp.scale_loss(loss, self.optim) as scaled_loss:
+                        scaled_loss.backward()
+                else:
+                    loss.backward()
 
-            #     loss = loss.detach()
+                loss = loss.detach()
 
-            #     # Update Parameters
-            #     if self.args.clip_grad_norm > 0:
-            #         if self.args.fp16 and _use_native_amp:
-            #             self.scaler.unscale_(self.optim)
-            #             torch.nn.utils.clip_grad_norm_(
-            #                 self.model.parameters(), self.args.clip_grad_norm)
-            #         elif self.args.fp16 and _use_apex:
-            #             torch.nn.utils.clip_grad_norm_(amp.master_params(
-            #                 self.optim), self.args.clip_grad_norm)
-            #         else:
-            #             torch.nn.utils.clip_grad_norm_(
-            #                 self.model.parameters(), self.args.clip_grad_norm)
+                # Update Parameters
+                if self.args.clip_grad_norm > 0:
+                    if self.args.fp16 and _use_native_amp:
+                        self.scaler.unscale_(self.optim)
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.args.clip_grad_norm)
+                    elif self.args.fp16 and _use_apex:
+                        torch.nn.utils.clip_grad_norm_(amp.master_params(
+                            self.optim), self.args.clip_grad_norm)
+                    else:
+                        torch.nn.utils.clip_grad_norm_(
+                            self.model.parameters(), self.args.clip_grad_norm)
 
-            #     if self.args.fp16 and _use_native_amp:
-            #         self.scaler.step(self.optim)
-            #         self.scaler.update()
-            #     else:
-            #         self.optim.step()
+                if self.args.fp16 and _use_native_amp:
+                    self.scaler.step(self.optim)
+                    self.scaler.update()
+                else:
+                    self.optim.step()
 
-            #     if self.lr_scheduler:
-            #         self.lr_scheduler.step()
-            #     for param in self.model.parameters():
-            #         param.grad = None
+                if self.lr_scheduler:
+                    self.lr_scheduler.step()
+                for param in self.model.parameters():
+                    param.grad = None
 
-            #     global_step += 1
+                global_step += 1
 
-            #     for k, v in results.items():
-            #         if k in epoch_results:
-            #             epoch_results[k] += v.item()
+                for k, v in results.items():
+                    if k in epoch_results:
+                        epoch_results[k] += v.item()
 
-            #     if self.lr_scheduler:
-            #         if version.parse(torch.__version__) >= version.parse("1.4"):
-            #             lr = self.lr_scheduler.get_last_lr()[0]
-            #         else:
-            #             lr = self.lr_scheduler.get_lr()[0]
-            #     else:
-            #         try:
-            #             lr = self.optim.get_lr()[0]
-            #         except AttributeError:
-            #             lr = self.args.lr
+                if self.lr_scheduler:
+                    if version.parse(torch.__version__) >= version.parse("1.4"):
+                        lr = self.lr_scheduler.get_last_lr()[0]
+                    else:
+                        lr = self.lr_scheduler.get_lr()[0]
+                else:
+                    try:
+                        lr = self.optim.get_lr()[0]
+                    except AttributeError:
+                        lr = self.args.lr
 
-            #     if self.verbose:
-            #         loss_meter.update(loss.item())
-            #         desc_str = f'Epoch {epoch} | LR {lr:.6f}'
-            #         desc_str += f' | Loss {loss_meter.val:4f}'
+                if self.verbose:
+                    loss_meter.update(loss.item())
+                    desc_str = f'Epoch {epoch} | LR {lr:.6f}'
+                    desc_str += f' | Loss {loss_meter.val:4f}'
 
-            #         pbar.set_description(desc_str)
-            #         pbar.update(1)
+                    pbar.set_description(desc_str)
+                    pbar.update(1)
 
-            #     if self.args.distributed:
-            #         dist.barrier()
-            #     print('加载数据集耗时:',time_0-time_start)
-            #     print('vsd3d网络处理耗时:',time_1-time_0)
-            #     print('VL网络处理耗时:',time_2-time_1)
-            #     time_start = time.time()
-            #     print('反向传播耗时:',time_start-time_0)
+                if self.args.distributed:
+                    dist.barrier()
+                print('加载数据集耗时:',time_0-time_start)
+                print('vsd3d网络处理耗时:',time_1-time_0)
+                print('VL网络处理耗时:',time_2-time_1)
+                time_start = time.time()
+                print('反向传播耗时:',time_start-time_0)
                 
 
             if self.verbose:
@@ -580,6 +583,7 @@ if __name__ == "__main__":
     args.valid_batch_size = 100
     args.local_rank = 0
     args.max_text_length = 40
+    # args.vsd_pretrain = True
     ##############################################
 
 

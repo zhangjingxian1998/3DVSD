@@ -16,21 +16,19 @@ from packaging import version
 from tqdm import tqdm
 import torch
 import logging
-import numpy as np
 
 from param import parse_args
 
 from VSD_3D_data import get_loader
 from utils import LossMeter, set_global_logging_level
-import dist_utils
-# import wandb
 from Total3DUnderstanding.net_utils.utils import load_model, CheckpointIO
 from Total3DUnderstanding.utils.param import parse_args as total3d_parse_args
 from Total3DUnderstanding.configs.config_utils import CONFIG
 from vsd_3d.models import Model
 import time
-# set_global_logging_level(logging.ERROR, ["transformers"])
-
+from torch.utils.tensorboard import SummaryWriter
+logger = SummaryWriter(log_dir='./log')
+step_count = 0
 proj_dir = Path(__file__).resolve().parent.parent
 
 _use_native_amp = False
@@ -132,10 +130,16 @@ class Trainer(TrainerBase):
 
 
     def train(self):
+        step_count = 0
         device = next(self.model.parameters()).device
         self.vsd_3d_encoder = self.vsd_3d_encoder.to(device)
+        # if self.args.vsd_pretrain:
+        #     for param in self.model.named_parameters():
+        #         param[1].requires_grad = False
         if self.verbose:
             loss_meter = LossMeter()
+            loss_vl = LossMeter()
+            loss_vsd = LossMeter()
             best_valid = 0.
             best_epoch = 0
 
@@ -246,11 +250,20 @@ class Trainer(TrainerBase):
 
                 if self.verbose:
                     loss_meter.update(loss.item())
+                    loss_vl.update(results['loss'].item())
+                    loss_vsd.update(score_loss.item())
                     desc_str = f'Epoch {epoch} | LR {lr:.6f}'
                     desc_str += f' | Loss {loss_meter.val:4f}'
 
+                    desc_str += f' | Loss_VL {loss_vl.val:4f}'
+                    desc_str += f' | Loss_VSD {loss_vsd.val:4f}'
+
                     pbar.set_description(desc_str)
                     pbar.update(1)
+                    logger.add_scalar('total_loss', loss.item(), step_count)
+                    logger.add_scalar('loss_vl', results['loss'].item(), step_count)
+                    logger.add_scalar('loss_vsd', score_loss.item(), step_count)
+                    step_count = step_count + 1
 
                 if self.args.distributed:
                     dist.barrier()
