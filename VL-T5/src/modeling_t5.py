@@ -466,7 +466,7 @@ class VLT5(T5ForConditionalGeneration):
 
         if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
             # get decoder inputs from shifting lm labels to the right
-            decoder_input_ids = self._shift_right(labels)
+            decoder_input_ids = self._shift_right(labels) # 右移的目的是预测下一个吧
 
         # If decoding with past key value states, only the last tokens
         # should be given as an input
@@ -484,12 +484,13 @@ class VLT5(T5ForConditionalGeneration):
             V_L = encoder_outputs[0].size(1) - L
             vis_attention_mask = attention_mask.new_ones(B, V_L)
         # 更改
-        if 'r_G' in kwargs.keys():
-            r_G_mask = torch.ones([B,1]).to(attention_mask.device)
-            encoder_attention_mask = torch.cat([r_G_mask, attention_mask, vis_attention_mask], dim=1)
-            hidden_states = torch.cat([kwargs['r_G'], hidden_states], dim=1)
-        else:
-            encoder_attention_mask = torch.cat([attention_mask, vis_attention_mask], dim=1)
+        # if 'r_G' in kwargs.keys():
+        #     r_G_mask = torch.ones([B,1]).to(attention_mask.device)
+        #     encoder_attention_mask = torch.cat([r_G_mask, attention_mask, vis_attention_mask], dim=1)
+        #     hidden_states = torch.cat([kwargs['r_G'], hidden_states], dim=1)
+        # else:
+        #     encoder_attention_mask = torch.cat([attention_mask, vis_attention_mask], dim=1)
+        encoder_attention_mask = torch.cat([attention_mask, vis_attention_mask], dim=1)
         # Decode
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,

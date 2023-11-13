@@ -1,7 +1,7 @@
 # The name of experiment 通过预训练, 使模型对于 <OBJ> 和 <REL> 进行学习
 name=VLT5
 
-output=VL-T5/snap/VSD_3D/$name
+output=VL-T5/snap/VSD_3D/final/$name
 
 PYTHONPATH=$PYTHONPATH:./src \
 python -m torch.distributed.launch \
@@ -22,6 +22,6 @@ python -m torch.distributed.launch \
         --n_ground 4 \
         --backbone 'VL-T5/t5-base' \
         --output $output ${@:2} \
-        --load 'VL-T5/snap/VSD_3D/vsd_pretrain/VLT5/BEST' \
+        --load 'VL-T5/snap/VSD_3D/pretrain/VLT5/BEST' \
         --num_beams 5 \
         --valid_batch_size 100 \

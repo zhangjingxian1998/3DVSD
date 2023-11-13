@@ -579,7 +579,7 @@ if __name__ == "__main__":
     # args.output = 'VL-T5/snap/sp/baseline/test'
     # args.load = None
     args.num_beams = 5
-    args.batch_size = 32
+    args.batch_size = 1
     args.valid_batch_size = 100
     args.local_rank = 0
     args.max_text_length = 40

@@ -9,7 +9,7 @@ class SUBGRAPH(nn.Module):
         论文figure4提供的
         '''
         super(SUBGRAPH,self).__init__()
-        self.calculate_score = EDGESCORE(768)
+        self.calculate_score = EDGESCORE()
         pass
     
     def forward(self, s_e, adjacency_matrix):
