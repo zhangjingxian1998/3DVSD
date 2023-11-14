@@ -19,6 +19,8 @@ class Model(nn.Module):
         self.OcGCN = OcGCN() # 计算图输出
         self.subgraph_creator = SUBGRAPH() # 计算子图
         self.loss_score = Loss_score()
+        # self.r_G_softmax = nn.Softmax(dim=1)
+        self.r_G_layernorm = nn.LayerNorm(768)
         pass
 
     def forward(self, args, data):
@@ -104,17 +106,16 @@ class Model(nn.Module):
             pass
         return r_G, text_prompt, loss
 
-    def meanpool(self,s_v, s_e, sub_graph,s_e_score,num_node):
+    def meanpool(self,s_v, s_e, sub_graph, score, num_node):
         B, N, D = s_v.shape
-        score = s_e_score[:,:2]                                             # 只需要考虑sub和obj
         lam_b = torch.sum(score.view(B,-1), dim=-1,keepdim=True) + 1e-6
         lam_b = lam_b.repeat(1,N)
         # 为去除没有子节点情况的干扰, 即把第一列清0
         zero_one_hot = torch.ones_like(lam_b)
         zero_one_hot[:,0] = 0
         # TODO 更改, 要把妹有节点和双节点的考虑进去， 可能只需要做两次one_hot就行
-        sub_graph_mask_subject = one_hot(sub_graph[:, 0],num_classes=N)
-        sub_graph_mask_object  = one_hot(sub_graph[:, 1],num_classes=N)
+        sub_graph_mask_subject = one_hot(sub_graph[:, 0], num_classes=N)
+        sub_graph_mask_object  = one_hot(sub_graph[:, 1], num_classes=N)
         sub_graph_mask_subject = sub_graph_mask_subject * zero_one_hot      # 分子上的 +1
         sub_graph_mask_object  = sub_graph_mask_object  * zero_one_hot
         
@@ -124,9 +125,10 @@ class Model(nn.Module):
         s_v = s_v.unsqueeze(-2).repeat(1,1,N,1)                         # [B, N, D] --> [B, N, 1, D] --> [B, N, N, D]
         lam = lam.view(B,N,1,1).repeat(1,1,N,D)                         # [B,N] --> [B,N,1,1] --> [B,N,N,D]
         
-        r_G = ((s_v + s_e) * lam)
+        r_G = (s_v + s_e) * lam
         r_G = torch.sum(r_G.view(B,-1,D),dim=-2)
-        r_G = r_G / torch.pow(num_node.view(B,1).repeat(1,D),2)
+        r_G = r_G / torch.pow(num_node,2).view(B,1).repeat(1,D)
+        r_G = self.r_G_layernorm(r_G)
         return r_G.view(B,1,-1)
 
     def calculate_direction(self,centroid):

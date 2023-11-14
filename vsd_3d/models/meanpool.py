@@ -11,7 +11,7 @@ class MeanPool(nn.Module):
 
     def forward(self,s_v, s_e, sub_graph,s_e_score,num_node):
         B, N, D = s_v.shape
-        score = s_e_score[:,:2]                                             # 只需要考虑sub和obj
+        score = s_e_score                                             # 只需要考虑sub和obj
         lam_b = torch.sum(score.view(B,-1), dim=-1,keepdim=True) + 1e-6
         lam_b = lam_b.repeat(1,N)
         # 为去除没有子节点情况的干扰, 即把第一列清0

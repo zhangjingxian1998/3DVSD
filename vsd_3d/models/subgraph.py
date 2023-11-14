@@ -10,6 +10,7 @@ class SUBGRAPH(nn.Module):
         '''
         super(SUBGRAPH,self).__init__()
         self.calculate_score = EDGESCORE()
+        # self.softmax = nn.Softmax(dim=2)
         pass
     
     def forward(self, s_e, adjacency_matrix):
@@ -22,7 +23,9 @@ class SUBGRAPH(nn.Module):
         s_e = s_e.view(B, N*N, D)                                           # 每个batch展平，送入网络处理 [B, N, N, D] --> [B, N*N, D]
         s_e_score = self.calculate_score(s_e)                               # [B, N*N, D] --> [B, N*N, 1]
         s_e_score = s_e_score.view(B, N, N) * adjacency_matrix_mask_float   # 网络处理完后，形状恢复 [B, N*N, 1] --> [B, N, N] 并且只保留存在边关系的得分
-
+        s_e_score = s_e_score[:,:2]
+        # origin_score = s_e_score.view(B, N, N) - (1 - adjacency_matrix_mask_float) * 1e6
+        # s_e_score = self.softmax(origin_score[:,:2,])
         # step2
         flag = torch.ones(B) * -1
         sub_max_score, sub_max_score_id = torch.max(s_e_score[:,0],dim=-1)  # 取sub和各边的分数，取最大值和其索引 [B]

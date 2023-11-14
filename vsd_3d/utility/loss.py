@@ -13,18 +13,17 @@ class Loss_score(nn.Module):
         target_sent 是标注的描述性语句
         函数的目的是找出描述语句中存在的第三方, 使其作为sub和obj之间的关联词
         '''
-        B, N, _ = output.shape
+        B, _, N = output.shape
         device = adjacency_matrix.device
         loss = 0
         class_name = class_name[:, 2:]                  # [B, N] --> [B, N-2]
 
         # 1、处理score
-        score = output[:,:2,2:]                         # [B, N, N] --> [B, 2, N-2]
-        score_mask_float = (score == 0).float() \
-                            * torch.ones_like(score)    # 防止不存边关系部分的0做log出现-inf
+        score = output[:,:,2:]                         # [B, N, N] --> [B, 2, N-2]
+        score_mask_float = (score == 0).float()         # 防止不存边关系部分的0做log出现-inf
                      
-        score = torch.log(score + score_mask_float)     # 将其置1, 使log值为0
-        score = -torch.sum(score, dim=1)                # [B, 2, N-2] --> [B, N-2]
+        score = -torch.log(score + score_mask_float)     # 将其置1, 使log值为0
+        score = torch.sum(score, dim=1)                # [B, 2, N-2] --> [B, N-2]
         name_matrix = torch.zeros(B,N-2).to(device)     # [B, N-2]
         # 2、通过查询class_name每一个是否在对应的target_sent中, 给该位置赋值0|1, (0:类不在描述语句中, 1:类在描述语句中)
         for batch_id, class_name_one_batch in enumerate(class_name):

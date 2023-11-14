@@ -279,6 +279,7 @@ class Trainer(TrainerBase):
 
             # Validation
             score_dict = self.evaluate(self.val_loader)
+            
 
             if self.verbose:
                 valid_score = score_dict['CIDEr'] * 100.
@@ -290,6 +291,7 @@ class Trainer(TrainerBase):
                 log_str = ''
                 log_str += "\nEpoch %d: Valid Raw %0.2f" % (epoch, valid_score)
                 log_str += "\nEpoch %d: Best Raw %0.2f\n" % (best_epoch, best_valid)
+            
 
                 # wandb_log_dict = {}
                 # wandb_log_dict['Train/Loss'] = epoch_results['loss'] / len(self.train_loader)
@@ -306,7 +308,11 @@ class Trainer(TrainerBase):
 
                 # wandb.log(wandb_log_dict, step=epoch)
                 print(log_str)
-
+            score_dict = self.evaluate(self.test_loader)
+            test_score = score_dict['CIDEr'] * 100.
+            log_str = ''
+            log_str += "\nTest %0.2f" % (test_score)
+            print(log_str)
             if self.args.distributed:
                 dist.barrier()
 
@@ -322,6 +328,10 @@ class Trainer(TrainerBase):
         if self.verbose:
             evaluator = self.test_loader.evaluator
             score_dict = evaluator.evaluate(target, answer)
+
+            test_score = score_dict['CIDEr'] * 100.
+            log_str = ''
+            log_str += "\nTest %0.2f" % (test_score)
 
             # evaluator.dump_result(quesid2ans)
 
