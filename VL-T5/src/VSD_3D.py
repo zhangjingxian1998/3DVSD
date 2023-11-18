@@ -125,6 +125,9 @@ class Trainer(TrainerBase):
                 self.model = DDP(self.model, device_ids=[args.gpu],
                                  find_unused_parameters=True
                                  )
+                self.vsd_3d_encoder = DDP(self.vsd_3d_encoder, device_ids=[args.gpu],
+                                 find_unused_parameters=True
+                                 )
         if self.verbose:
             print(f'It took {time() - start:.1f}s')
 
@@ -308,11 +311,6 @@ class Trainer(TrainerBase):
 
                 # wandb.log(wandb_log_dict, step=epoch)
                 print(log_str)
-            score_dict = self.evaluate(self.test_loader)
-            test_score = score_dict['CIDEr'] * 100.
-            log_str = ''
-            log_str += "\nTest %0.2f" % (test_score)
-            print(log_str)
             if self.args.distributed:
                 dist.barrier()
 

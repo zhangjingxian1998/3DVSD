@@ -21,6 +21,7 @@ class Model(nn.Module):
         self.loss_score = Loss_score()
         # self.r_G_softmax = nn.Softmax(dim=1)
         self.r_G_layernorm = nn.LayerNorm(768)
+        self.r_G_dropout = nn.Dropout(p=0.1)
         pass
 
     def forward(self, args, data):
@@ -129,6 +130,7 @@ class Model(nn.Module):
         r_G = torch.sum(r_G.view(B,-1,D),dim=-2)
         r_G = r_G / torch.pow(num_node,2).view(B,1).repeat(1,D)
         r_G = self.r_G_layernorm(r_G)
+        # r_G = self.r_G_dropout(r_G)
         return r_G.view(B,1,-1)
 
     def calculate_direction(self,centroid):
