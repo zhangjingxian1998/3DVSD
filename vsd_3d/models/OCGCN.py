@@ -107,7 +107,7 @@ class OcGCN(nn.Module):
         centroid = data['centroid']
         B, N, _ = centroid.shape
 
-        pose_index = self.oritation2int(data['basis'], data['coeffs'], self.pose_emb.weight.shape[0]) # 根据物体的姿态和大小确定方向朝向
+        pose_index = self.oritation2int(data['basis'], data['coeffs'], self.pose_emb.weight.shape[0], data['r_ex']) # 根据物体的姿态和大小确定方向朝向
         pose = self.pose_emb(pose_index.int())
         vision = self.vison_down(vision) # 2048 --> 768
         vision = self.vision_layernorm(vision + pose)
@@ -133,15 +133,18 @@ class OcGCN(nn.Module):
         s_e = s_e.view(B, N, N, -1) * adjacency_matrix_mask_float    # 网络处理完恢复尺寸 [B, N*N, D] --> [B, N, N, D] 并仅使存在关系的边保持梯度
         return vision, s_e
     
-    def oritation2int(self, oritation,size, num_area):
+    def oritation2int(self, oritation,size, num_area, r_ex):
         '''
         对平面进行分区，根据方向朝向，返回指定的位置索引。
         '''
         B,N = oritation.shape[:2]
+        r_ex = r_ex.unsqueeze(1).repeat(1,N,1,1)
         one_step = 360. / num_area
         size = size.unsqueeze(-2).repeat(1,1,3,1)           # [B, N, 3] --> [B, N, 3, 3]
         oritation = oritation * size                        # 利用尺寸放缩，[B,N,3,3] * [B,N,3,3] 
         oritation = oritation[:,:,0] + oritation[:,:,-1]    # 取两方向向量和作为方向判据
+        # oritation = torch.matmul(r_ex,oritation.unsqueeze(-1)).squeeze(-1)
+        # oritation[:,:,1]=0
         # 与相机坐标系下的水平轴方向计算角度
         # A·B = |A||B|cos(radian)
         camera_x_vector = torch.tensor([1.,0.,0.]).to(oritation.device)

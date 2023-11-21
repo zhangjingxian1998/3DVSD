@@ -44,12 +44,20 @@ class SUBGRAPH(nn.Module):
         obj_max_score_id_tmp = copy.deepcopy(obj_max_score_id)
         # sub_max_score_id[mask_1] = 0
         # obj_max_score_id[mask_1] = 0
+
+
+        # mask_sub = (sub_max_score * mask_1) >= (obj_max_score * mask_1)
+        # mask_obj = (obj_max_score * mask_1) >= (sub_max_score * mask_1)
+        # sub_max_score_id = sub_max_score_id * mask_sub
+        # obj_max_score_id = obj_max_score_id * mask_obj
+
         mask_sub = (sub_max_score * mask_1) > (obj_max_score * mask_1)
         mask_obj = (obj_max_score * mask_1) > (sub_max_score * mask_1)
         sub_max_score_id[mask_sub] = sub_max_score_id_tmp[mask_sub]
         obj_max_score_id[mask_obj] = obj_max_score_id_tmp[mask_obj]
         final_id = torch.cat([sub_max_score_id.unsqueeze(-1), obj_max_score_id.unsqueeze(-1)], dim=-1) # [B, 2]
-        for i, id in enumerate(final_id):
+        for i, id in enumerate(final_id): # 0和2的情况loss降不下去
+            # flag[i] = 0
             if id[0]>0 and id[1]>0:
                 flag[i] = 3
             elif id[0]>0:
@@ -58,7 +66,6 @@ class SUBGRAPH(nn.Module):
                 flag[i]=2
             else:
                 flag[i]=0
-
         return final_id, s_e_score, flag
     
     def forward_(self, s_e, adjacency_matrix): # 节省显存

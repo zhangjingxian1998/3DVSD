@@ -6,7 +6,8 @@ import time
 import numpy as np
 from vsd_3d.utility.loss import Loss_score
 from torch.nn.functional import one_hot
-
+import os
+import cv2
 class Model(nn.Module):
     '''
     VSD3D处理模型
@@ -22,6 +23,9 @@ class Model(nn.Module):
         # self.r_G_softmax = nn.Softmax(dim=1)
         self.r_G_layernorm = nn.LayerNorm(768)
         self.r_G_dropout = nn.Dropout(p=0.1)
+        self.vg_root = '/home/Datasets/VG/VG_100K/'
+        self.f_root = '/home/Datasets/SpatialScene/images/flickr/'
+        self.n_root = '/home/Datasets/SpatialScene/images/nyu/'
         pass
 
     def forward(self, args, data):
@@ -54,6 +58,7 @@ class Model(nn.Module):
             return text_prompt
         else:
             vis_feats = data['vis_feats'].to(self.device)
+            img_id = data['batch_entry']['img_id']
             sentence = data['batch_entry']['sentences']
             data = data['batch_entry_3d']
             data['centroid'] = data['centroid'].to(self.device)
@@ -62,12 +67,13 @@ class Model(nn.Module):
             data['basis'] = data['basis'].to(self.device)
             data['coeffs'] = data['coeffs'].to(self.device)
             data['mask_ture_class'] = data['mask_ture_class'].to(self.device)
+            data['r_ex'] = data['r_ex'].to(self.device)
             class_name = data['class_name']
             # 需要判断sub和middle, middle和obj的关系
             # step1 计算邻接矩阵
             time_0 = time.time()
             adjacency_matrix = self.calculate_adjacenct_matrix(data)
-            num_node = torch.sum((adjacency_matrix), dim=-1) # 计算节点数量
+            num_node = torch.sum((adjacency_matrix), dim=-1)    # 计算节点数量
             num_node = torch.sum((num_node > 0).float(),dim=-1) # 计算节点数量
             time_1 = time.time()
             # step2 计算图输出
@@ -90,7 +96,7 @@ class Model(nn.Module):
             direction_list_extral = None
             if extral_flag_3_center.shape[0]:
                 direction_list_extral = self.calculate_direction(extral_flag_3_center)
-
+            # self.visualize(img_id,direction_list,direction_list_extral,data['boxes_center_3d'],subgraph,flag, class_name)
             # TODO 接下来根据flag的不同, 生成不同的提示语句
             time_5 = time.time()
             # 返回子图中间节点类别
@@ -109,6 +115,8 @@ class Model(nn.Module):
 
     def meanpool(self,s_v, s_e, sub_graph, score, num_node):
         B, N, D = s_v.shape
+        score[:,0,1] = 1
+        score[:,1,0] = 1
         lam_b = torch.sum(score.view(B,-1), dim=-1,keepdim=True) + 1e-6
         lam_b = lam_b.repeat(1,N)
         # 为去除没有子节点情况的干扰, 即把第一列清0
@@ -117,10 +125,12 @@ class Model(nn.Module):
         # TODO 更改, 要把妹有节点和双节点的考虑进去， 可能只需要做两次one_hot就行
         sub_graph_mask_subject = one_hot(sub_graph[:, 0], num_classes=N)
         sub_graph_mask_object  = one_hot(sub_graph[:, 1], num_classes=N)
+        sub_one_hot = one_hot(torch.zeros_like(sub_graph[:, 0]), num_classes=N)
+        obj_one_hot = one_hot(torch.ones_like(sub_graph[:, 0]), num_classes=N)
         sub_graph_mask_subject = sub_graph_mask_subject * zero_one_hot      # 分子上的 +1
         sub_graph_mask_object  = sub_graph_mask_object  * zero_one_hot
         
-        score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object
+        score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object + sub_one_hot + obj_one_hot
         lam = score / lam_b
 
         s_v = s_v.unsqueeze(-2).repeat(1,1,N,1)                         # [B, N, D] --> [B, N, 1, D] --> [B, N, N, D]
@@ -144,7 +154,7 @@ class Model(nn.Module):
         B, N, D = centroid.shape
         # 坐标归一化
         min_bath = torch.min(centroid.view(B,-1),dim=-1,keepdim=True)[0]    # 找到最小值
-        min_bath = torch.min(min_bath, torch.tensor(0.)) # 最小值不小于0
+        min_bath = torch.min(min_bath, torch.tensor(0.)) # 最小值不大于0
         min_bath = min_bath.view(B, 1, 1).repeat(1, N, D)
         center = centroid + torch.abs(min_bath) # 使最小值为0
         norm_center = torch.norm(center,dim=-1,keepdim=True)
@@ -232,13 +242,13 @@ class Model(nn.Module):
         eye_reverse = (1. - torch.eye(N)).to(device)                # 主对角线为0,其余为1,为了消去主对角线的自身关系
         eye_reverse = eye_reverse.unsqueeze(0).repeat(B, 1, 1)      # 为每个batch复制
 
-        centroid_V = centroid.unsqueeze(2).repeat(1,1,N,1)          # 行复制，每一行都是一样的, [B,N,3] --> [B,N,1,3] --> [B,N,N,3]
-        centroid_H = centroid.unsqueeze(1).repeat(1,N,1,1)          # 列复制，每一列都是一样的, [B,N,3] --> [B,1,N,3] --> [B,N,N,3]
+        centroid_V = centroid.unsqueeze(2).repeat(1,1,N,1)          # 列复制，每一行都是一样的, [B,N,3] --> [B,N,1,3] --> [B,N,N,3]
+        centroid_H = centroid.unsqueeze(1).repeat(1,N,1,1)          # 行复制，每一列都是一样的, [B,N,3] --> [B,1,N,3] --> [B,N,N,3]
         dist = torch.norm(centroid_V - centroid_H,dim=-1)           # 2范数计算距离, [B,N,N,3] --> [B,N,N]
         A[2:,2:] = A[2:,2:] * (dist > dis_threshold).float()[2:,2:] # 距离筛选, 筛选时不动前两行以及前两列, 保证sub和obj与其余保留节点都存在关系
 
-        obj_conf_V = obj_conf.unsqueeze(-1).repeat(1,1,N)           # 行复制，每一行都是一样的, [B,N] --> [B,N,1] --> [B,N,N]
-        obj_conf_H = obj_conf.unsqueeze(1).repeat(1,N,1)            # 列复制，每一列都是一样的, [B,N] --> [B,1,N] --> [B,N,N]
+        obj_conf_V = obj_conf.unsqueeze(-1).repeat(1,1,N)           # 列复制，每一行都是一样的, [B,N] --> [B,N,1] --> [B,N,N]
+        obj_conf_H = obj_conf.unsqueeze(1).repeat(1,N,1)            # 行复制，每一列都是一样的, [B,N] --> [B,1,N] --> [B,N,N]
         obj_conf_V = (obj_conf_V >= conf_threshold).float()
         obj_conf_H = (obj_conf_H >= conf_threshold).float()
 
@@ -253,7 +263,7 @@ class Model(nn.Module):
         calculate_center = torch.zeros(B,4,3).to(self.device)
         for batch_id, flag_one in enumerate(flag):
             if flag_one == 0: # 状况0
-                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1]:
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
                     calculate_center[batch_id, 0] = data['centroid'][batch_id,0]
                     calculate_center[batch_id, 1] = data['centroid'][batch_id,0]
                     calculate_center[batch_id, 2] = data['centroid'][batch_id,1]
@@ -341,6 +351,62 @@ class Model(nn.Module):
                 a = a + 1
             text_prompt.append(text)
         return text_prompt
+    def visualize(self,img_id_batch,direction_list,direction_list_extral,boxes_center_3d,subgraph,flag, class_name):
+        extral_id = 0
+        font = cv2.FONT_HERSHEY_DUPLEX
+        scale = 0.5
+        line_type = cv2.LINE_AA
+        for idx, img_id in enumerate(img_id_batch):
+            img_path = self.vg_root+img_id+'.jpg'
+            if not os.path.exists(img_path):
+                img_path = self.f_root+img_id+'.jpg'
+            if not os.path.exists(img_path):
+                img_path = self.n_root+img_id+'.png'
+            img = cv2.imread(img_path)
+            flag_one = flag[idx]
+            subgraph_one = subgraph[idx]
+            boxes_center_one = boxes_center_3d[idx][:,1:]
+            class_name_one = class_name[idx]
+            center_sub = boxes_center_one[0]
+            center_obj = boxes_center_one[1]
+            direction_list_one = direction_list[idx]
+            
+            cv2.circle(img,center_sub.int().cpu().numpy(),5,(255,0,0),thickness=-1)
+            cv2.putText(img,class_name_one[0],center_sub.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(255,0,0),lineType=line_type)
+            cv2.circle(img,center_obj.int().cpu().numpy(),5,(0,0,255),thickness=-1)
+            cv2.putText(img,class_name_one[1],center_obj.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+            
+            if flag_one == 0:
+                cv2.putText(img,class_name_one[0] + ' ' + direction_list_one[0] + ' ' + class_name_one[1],(0,10),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
+            elif flag_one == 1:
+                center_middle = boxes_center_one[subgraph_one[0]]
+                cv2.circle(img,center_middle.int().cpu().numpy(),5,(0,255,0),thickness=-1)
+                cv2.putText(img,class_name_one[subgraph_one[0]],center_middle.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
+                cv2.putText(img,class_name_one[subgraph_one[0]] + ' ' + direction_list_one[0] + ' ' + class_name_one[0],(0,15),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[0] + ' ' + direction_list_one[1] + ' ' + class_name_one[1],(0,30),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                pass
+            elif flag_one == 2:
+                center_middle = boxes_center_one[subgraph_one[1]]
+                cv2.circle(img,center_middle.int().cpu().numpy(),5,(0,255,0),thickness=-1)
+                cv2.putText(img,class_name_one[subgraph_one[1]],center_middle.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
+                cv2.putText(img,class_name_one[subgraph_one[1]] + ' ' + direction_list_one[0] + ' ' + class_name_one[1],(0,15),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[1] + ' ' + direction_list_one[1] + ' ' + class_name_one[0],(0,30),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                pass
+            elif flag_one == 3:
+                center_middle1 = boxes_center_one[subgraph_one[0]]
+                center_middle2 = boxes_center_one[subgraph_one[1]]
+                cv2.circle(img,center_middle1.int().cpu().numpy(),5,(0,255,0),thickness=-1)
+                cv2.putText(img,class_name_one[subgraph_one[0]],center_middle1.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
+                cv2.circle(img,center_middle2.int().cpu().numpy(),5,(0,255,0),thickness=-1)
+                cv2.putText(img,class_name_one[subgraph_one[1]],center_middle2.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
+
+                cv2.putText(img,class_name_one[subgraph_one[0]] + ' ' + direction_list_one[0] + ' ' + class_name_one[0],(0,15),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[0] + ' ' + direction_list_one[1] + ' ' + class_name_one[1],(0,30),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[1] + ' ' + direction_list_extral[extral_id][0] + ' ' + class_name_one[subgraph_one[1]],(0,45),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                extral_id = extral_id + 1
+                pass
+            cv2.imwrite('ff.png',img)
+        pass
 
 if __name__ == 'main':
     model = Model()

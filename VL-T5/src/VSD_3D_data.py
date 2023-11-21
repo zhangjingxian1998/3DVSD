@@ -206,8 +206,8 @@ class VSD_3D_FineTuneDataset(Dataset):
 
                 n_boxes = len(boxes)
                 
-                boxes_center_w = ((boxes[:,2:3] - boxes[:,0:1]) / 2) * img_w
-                boxes_center_h = ((boxes[:,-1:] - boxes[:,1:2]) / 2) * img_h
+                boxes_center_w = ((boxes[:,2:3] + boxes[:,0:1]) / 2) * img_w
+                boxes_center_h = ((boxes[:,-1:] + boxes[:,1:2]) / 2) * img_h
                 boxes_center_3d = torch.cat([torch.zeros(n_boxes,1), boxes_center_w, boxes_center_h], dim=-1) # 深度方向为0, 其余取自身的2D location
                 # feats = np.zeros(shape=(n_boxes, 2048), dtype=np.float32)
                 feats = f[f'{img_id}/features'][()][:2]
@@ -315,6 +315,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             out_dict_3dvsd['class_name'] = f[f'{img_id}/3d/object/class_name'][()] # 物体的类别名称(1600类)
             out_dict_3dvsd['mask_ture_class'] = f[f'{img_id}/3d/object/mask_ture_class'][()].reshape(n_boxes) # 物体类别是否与nyu40类对应，对应的物体处为1
             out_dict_3dvsd['basis'] = np.matmul(r_ex.reshape(1,3,3).repeat(n_boxes,axis=0), basis) # 姿态转换到相机坐标系
+            # out_dict_3dvsd['basis'] = basis # 姿态不应直接变到相机坐标系
             out_dict_3dvsd['centroid'] = np.matmul(r_ex.reshape(1,3,3).repeat(n_boxes,axis=0), centroid.reshape(-1,3,1)).reshape(n_boxes,3) # 位置转换到相机坐标系
             obj_conf = self.source_to_h5[f'{img_id}/obj_conf'][()]
             obj_conf = np.insert(obj_conf,0,1)

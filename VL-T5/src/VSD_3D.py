@@ -109,7 +109,7 @@ class Trainer(TrainerBase):
             from time import time
             start = time()
         self.model = self.model.to(args.gpu)
-
+        # self.vsd_3d_encoder = self.vsd_3d_encoder.to(args.gpu)
         # Optimizer
         if train:
             self.optim, self.lr_scheduler = self.create_optimizer_and_scheduler()
@@ -125,9 +125,9 @@ class Trainer(TrainerBase):
                 self.model = DDP(self.model, device_ids=[args.gpu],
                                  find_unused_parameters=True
                                  )
-                self.vsd_3d_encoder = DDP(self.vsd_3d_encoder, device_ids=[args.gpu],
-                                 find_unused_parameters=True
-                                 )
+                # self.vsd_3d_encoder = DDP(self.vsd_3d_encoder, device_ids=[args.gpu],
+                #                  find_unused_parameters=True
+                #                  )
         if self.verbose:
             print(f'It took {time() - start:.1f}s')
 

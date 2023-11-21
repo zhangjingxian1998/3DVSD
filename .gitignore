@@ -12,3 +12,5 @@ __pycache__
 VL-T5/bart-base
 *.pth
 log
+*.png
+.gitignore
