@@ -115,8 +115,8 @@ class Model(nn.Module):
 
     def meanpool(self,s_v, s_e, sub_graph, score, num_node):
         B, N, D = s_v.shape
-        score[:,0,1] = 1
-        score[:,1,0] = 1
+        # score[:,0,1] = 1
+        # score[:,1,0] = 1
         lam_b = torch.sum(score.view(B,-1), dim=-1,keepdim=True) + 1e-6
         lam_b = lam_b.repeat(1,N)
         # 为去除没有子节点情况的干扰, 即把第一列清0
@@ -130,7 +130,8 @@ class Model(nn.Module):
         sub_graph_mask_subject = sub_graph_mask_subject * zero_one_hot      # 分子上的 +1
         sub_graph_mask_object  = sub_graph_mask_object  * zero_one_hot
         
-        score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object + sub_one_hot + obj_one_hot
+        # score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object + sub_one_hot + obj_one_hot
+        score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object
         lam = score / lam_b
 
         s_v = s_v.unsqueeze(-2).repeat(1,1,N,1)                         # [B, N, D] --> [B, N, 1, D] --> [B, N, N, D]

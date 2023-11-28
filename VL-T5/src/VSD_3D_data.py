@@ -286,8 +286,8 @@ class VSD_3D_FineTuneDataset(Dataset):
 
                 n_boxes = len(boxes)
 
-                boxes_center_w = ((boxes[:,2:3] - boxes[:,0:1]) / 2) * img_w
-                boxes_center_h = ((boxes[:,-1:] - boxes[:,1:2]) / 2) * img_h
+                boxes_center_w = ((boxes[:,2:3] + boxes[:,0:1]) / 2) * img_w
+                boxes_center_h = ((boxes[:,-1:] + boxes[:,1:2]) / 2) * img_h
                 boxes_center_3d = torch.cat([torch.zeros(n_boxes,1), boxes_center_w, boxes_center_h], dim=-1) # 深度方向为0, 其余取自身的2D location
 
                 feats = np.zeros(shape=(n_boxes, 2048), dtype=np.float32)
