@@ -40,23 +40,23 @@ class SUBGRAPH(nn.Module):
         # final_id = sub_max_score_id * sub_score_mask \
         #             + obj_score_mask * obj_max_score_id           # 这种是不对的
         mask_1 = sub_max_score_id == obj_max_score_id # 相等的地方需要对分数进行判断, 将分数高的地方保留, 处理环形情况
-        sub_max_score_id_tmp = copy.deepcopy(sub_max_score_id)
-        obj_max_score_id_tmp = copy.deepcopy(obj_max_score_id)
+        # sub_max_score_id_tmp = copy.deepcopy(sub_max_score_id)
+        # obj_max_score_id_tmp = copy.deepcopy(obj_max_score_id)
         # sub_max_score_id[mask_1] = 0
         # obj_max_score_id[mask_1] = 0
 
 
-        # mask_sub = (sub_max_score * mask_1) >= (obj_max_score * mask_1)
-        # mask_obj = (obj_max_score * mask_1) >= (sub_max_score * mask_1)
-        # sub_max_score_id = sub_max_score_id * mask_sub
-        # obj_max_score_id = obj_max_score_id * mask_obj
+        mask_sub = (sub_max_score * mask_1) >= (obj_max_score * mask_1)
+        mask_obj = (obj_max_score * mask_1) >= (sub_max_score * mask_1)
+        sub_max_score_id = sub_max_score_id * mask_sub
+        obj_max_score_id = obj_max_score_id * mask_obj
 
-        mask_sub = (sub_max_score * mask_1) > (obj_max_score * mask_1)
-        mask_obj = (obj_max_score * mask_1) > (sub_max_score * mask_1)
-        sub_max_score_id[mask_sub] = sub_max_score_id_tmp[mask_sub]
-        obj_max_score_id[mask_obj] = obj_max_score_id_tmp[mask_obj]
+        # mask_sub = (sub_max_score * mask_1) > (obj_max_score * mask_1)
+        # mask_obj = (obj_max_score * mask_1) > (sub_max_score * mask_1)
+        # sub_max_score_id[mask_sub] = sub_max_score_id_tmp[mask_sub]
+        # obj_max_score_id[mask_obj] = obj_max_score_id_tmp[mask_obj]
         final_id = torch.cat([sub_max_score_id.unsqueeze(-1), obj_max_score_id.unsqueeze(-1)], dim=-1) # [B, 2]
-        for i, id in enumerate(final_id): # 0和2的情况loss降不下去
+        for i, id in enumerate(final_id):
             # flag[i] = 0
             if id[0]>0 and id[1]>0:
                 flag[i] = 3

@@ -92,7 +92,8 @@ class VSD_3D_FineTuneDataset(Dataset):
             self.vg_classes = vg_classes
 
         # data_info_path = dataset_dir.joinpath(f'sp3000/{split}.json')
-        data_info_path = dataset_dir.joinpath(f'VSDv1/{split}.json')
+        data_info_path = dataset_dir.joinpath(f'{args.data}/{split}.json')
+        # data_info_path = dataset_dir.joinpath(f'VSDv2/{split}.json')
 
         with open(data_info_path) as f:
             dataset = json.load(f)
@@ -206,8 +207,8 @@ class VSD_3D_FineTuneDataset(Dataset):
 
                 n_boxes = len(boxes)
                 
-                boxes_center_w = ((boxes[:,2:3] + boxes[:,0:1]) / 2) * img_w
-                boxes_center_h = ((boxes[:,-1:] + boxes[:,1:2]) / 2) * img_h
+                boxes_center_w = (boxes[:,2:3] + boxes[:,0:1]) / 2
+                boxes_center_h = (boxes[:,-1:] + boxes[:,1:2]) / 2
                 boxes_center_3d = torch.cat([torch.zeros(n_boxes,1), boxes_center_w, boxes_center_h], dim=-1) # 深度方向为0, 其余取自身的2D location
                 # feats = np.zeros(shape=(n_boxes, 2048), dtype=np.float32)
                 feats = f[f'{img_id}/features'][()][:2]
@@ -269,6 +270,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             ###### Image ######
             if self.args.use_vision:
                 img_id = datum['img_id']
+                # img_id = '22'
                 out_dict['img_id'] = img_id
 
                 # Normalize the boxes (to 0 ~ 1)
@@ -286,9 +288,14 @@ class VSD_3D_FineTuneDataset(Dataset):
 
                 n_boxes = len(boxes)
 
-                boxes_center_w = ((boxes[:,2:3] + boxes[:,0:1]) / 2) * img_w
-                boxes_center_h = ((boxes[:,-1:] + boxes[:,1:2]) / 2) * img_h
-                boxes_center_3d = torch.cat([torch.zeros(n_boxes,1), boxes_center_w, boxes_center_h], dim=-1) # 深度方向为0, 其余取自身的2D location
+                boxes_center_w = (boxes[:,2:3] + boxes[:,0:1]) / 2
+                boxes_center_h = (boxes[:,-1:] + boxes[:,1:2]) / 2
+
+                boxes_center_w_show = boxes_center_w * img_w
+                boxes_center_h_show = boxes_center_h * img_h
+                boxes_center_3d_show = torch.cat([torch.zeros(n_boxes,1), boxes_center_w_show, boxes_center_h_show], dim=-1)
+
+                boxes_center_3d = torch.cat([torch.zeros(n_boxes,1), 1-boxes_center_h, boxes_center_w], dim=-1) # 深度方向为0, 其余取自身的2D location
 
                 feats = np.zeros(shape=(n_boxes, 2048), dtype=np.float32)
                 f[f'{img_id}/features'].read_direct(feats)
@@ -322,6 +329,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             obj_conf = np.insert(obj_conf,0,1)
             out_dict_3dvsd['obj_conf'] = obj_conf
             out_dict_3dvsd['boxes_center_3d'] = boxes_center_3d
+            out_dict_3dvsd['boxes_center_3d_show'] = boxes_center_3d_show
 
             # 不能直接在这里转input_id，因为子图没有，没有办法生成
             ###########   TEXT   ###################################################################### TODO(zhangjignxian) 输入词替换
@@ -528,6 +536,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             mask_ture_class = torch.zeros(B, N, dtype=torch.float)
             obj_conf = torch.zeros(B, N, dtype=torch.float)
             boxes_center_3d = torch.zeros(B, N, 3, dtype=torch.float)
+            boxes_center_3d_show = torch.zeros(B, N, 3, dtype=torch.float)
             class_name = []
 
             for i, entry in enumerate(batch):
@@ -535,6 +544,7 @@ class VSD_3D_FineTuneDataset(Dataset):
                 basis[i, : ] = torch.tensor(entry['out_dict_3dvsd']['basis'])
                 centroid[i, : ] = torch.tensor(entry['out_dict_3dvsd']['centroid'])
                 boxes_center_3d[i,:] = entry['out_dict_3dvsd']['boxes_center_3d']
+                boxes_center_3d_show[i,:] = entry['out_dict_3dvsd']['boxes_center_3d_show']
                 coeffs[i, : ] = torch.tensor(entry['out_dict_3dvsd']['coeffs'])
                 mask_ture_class[i, : ] = torch.tensor(entry['out_dict_3dvsd']['mask_ture_class'])
                 obj_conf[i, :] = torch.tensor(entry['out_dict_3dvsd']['obj_conf'])
@@ -550,6 +560,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             batch_entry_3d['class_name'] = np.array(class_name).astype(np.object_)
             batch_entry_3d['obj_conf'] = obj_conf
             batch_entry_3d['boxes_center_3d'] = boxes_center_3d
+            batch_entry_3d['boxes_center_3d_show'] = boxes_center_3d_show
             
             return {'batch_entry':batch_entry, 'batch_entry_3d':batch_entry_3d, 'vis_feats':vis_feats}
 

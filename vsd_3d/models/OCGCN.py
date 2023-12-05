@@ -94,7 +94,7 @@ class OcGCN(nn.Module):
             vision = torch.sum(vision,dim=2)                            # [B, N, N, D] --> [B, N, D]
             vision = self.sigmoid(vision)                               # 激活函数
             # vision = self.laynorm(vision)
-            vision = self.vision_layernorm_list[idx_layer](vision)
+            # vision = self.vision_layernorm_list[idx_layer](vision)
             
             if idx_layer > 0:
                 st_v = st_v_tmp
@@ -140,11 +140,12 @@ class OcGCN(nn.Module):
         B,N = oritation.shape[:2]
         r_ex = r_ex.unsqueeze(1).repeat(1,N,1,1)
         one_step = 360. / num_area
-        size = size.unsqueeze(-2).repeat(1,1,3,1)           # [B, N, 3] --> [B, N, 3, 3]
+        size = size.unsqueeze(-1).repeat(1,1,1,3)           # [B, N, 3] --> [B, N, 3, 1] --> [B, N, 3, 3]
+        # size = size.unsqueeze(-2).repeat(1,1,3,1)           # [B, N, 3] --> [B, N, 3, 1] --> [B, N, 3, 3]
         oritation = oritation * size                        # 利用尺寸放缩，[B,N,3,3] * [B,N,3,3] 
         oritation = oritation[:,:,0] + oritation[:,:,-1]    # 取两方向向量和作为方向判据
         # oritation = torch.matmul(r_ex,oritation.unsqueeze(-1)).squeeze(-1)
-        # oritation[:,:,1]=0
+        oritation[:,:,1]=0
         # 与相机坐标系下的水平轴方向计算角度
         # A·B = |A||B|cos(radian)
         camera_x_vector = torch.tensor([1.,0.,0.]).to(oritation.device)
@@ -166,7 +167,7 @@ class OcGCN(nn.Module):
         angle_degrees = angle_radians * (180.0 / math.pi)
 
         # 确保角度在0到360度之间
-        mask = torch.cross(oritation, camera_x_vector)[:,:,2]<0
+        mask = torch.cross(oritation, camera_x_vector)[:,:,1]<0
         angle_degrees[mask] = 360 - angle_degrees[mask]
         index = angle_degrees // one_step # 确定方位属于哪个分区
         return index

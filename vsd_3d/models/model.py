@@ -41,8 +41,11 @@ class Model(nn.Module):
             new_data_center = torch.zeros(data['centroid'].shape[0],2,3).to(self.device)
             for batch_id, mask_true in enumerate(torch.sum(data['mask_ture_class'], dim=-1)):
                 if mask_true == 2:
-                    new_data_center[batch_id,0] = data['centroid'][batch_id, 0]
-                    new_data_center[batch_id,1] = data['centroid'][batch_id, 1]
+                    center_0 = data['centroid'][batch_id,0].view(1,-1)
+                    center_1 = data['centroid'][batch_id,1].view(1,-1)
+                    center_0 ,center_1 = self.norm_two(center_0, center_1)
+                    new_data_center[batch_id,0] = center_0
+                    new_data_center[batch_id,1] = center_1
                 else:
                     new_data_center[batch_id,0] = data['boxes_center_3d'][batch_id, 0]
                     new_data_center[batch_id,1] = data['boxes_center_3d'][batch_id, 1]
@@ -68,6 +71,7 @@ class Model(nn.Module):
             data['coeffs'] = data['coeffs'].to(self.device)
             data['mask_ture_class'] = data['mask_ture_class'].to(self.device)
             data['r_ex'] = data['r_ex'].to(self.device)
+            # data['centroid'] = self.norm(data)
             class_name = data['class_name']
             # 需要判断sub和middle, middle和obj的关系
             # step1 计算邻接矩阵
@@ -96,7 +100,7 @@ class Model(nn.Module):
             direction_list_extral = None
             if extral_flag_3_center.shape[0]:
                 direction_list_extral = self.calculate_direction(extral_flag_3_center)
-            # self.visualize(img_id,direction_list,direction_list_extral,data['boxes_center_3d'],subgraph,flag, class_name)
+            self.visualize(img_id,direction_list,direction_list_extral,data['boxes_center_3d_show'],subgraph,flag, class_name)
             # TODO 接下来根据flag的不同, 生成不同的提示语句
             time_5 = time.time()
             # 返回子图中间节点类别
@@ -115,8 +119,8 @@ class Model(nn.Module):
 
     def meanpool(self,s_v, s_e, sub_graph, score, num_node):
         B, N, D = s_v.shape
-        # score[:,0,1] = 1
-        # score[:,1,0] = 1
+        score[:,0,1] = 1
+        score[:,1,0] = 1
         lam_b = torch.sum(score.view(B,-1), dim=-1,keepdim=True) + 1e-6
         lam_b = lam_b.repeat(1,N)
         # 为去除没有子节点情况的干扰, 即把第一列清0
@@ -130,8 +134,8 @@ class Model(nn.Module):
         sub_graph_mask_subject = sub_graph_mask_subject * zero_one_hot      # 分子上的 +1
         sub_graph_mask_object  = sub_graph_mask_object  * zero_one_hot
         
-        # score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object + sub_one_hot + obj_one_hot
-        score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object
+        score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object + sub_one_hot + obj_one_hot
+        # score = torch.sum(score,dim=1) + sub_graph_mask_subject + sub_graph_mask_object
         lam = score / lam_b
 
         s_v = s_v.unsqueeze(-2).repeat(1,1,N,1)                         # [B, N, D] --> [B, N, 1, D] --> [B, N, N, D]
@@ -153,14 +157,15 @@ class Model(nn.Module):
         # 如果是整体训练过程，那么就是提供2-3个目标
         # 要将位置坐标归一化，转换为[0,1], 要保持相对位置不变, 方法是坐标加上所有值的最小值，再除以各自的二范数
         B, N, D = centroid.shape
+        center = centroid
         # 坐标归一化
-        min_bath = torch.min(centroid.view(B,-1),dim=-1,keepdim=True)[0]    # 找到最小值
-        min_bath = torch.min(min_bath, torch.tensor(0.)) # 最小值不大于0
-        min_bath = min_bath.view(B, 1, 1).repeat(1, N, D)
-        center = centroid + torch.abs(min_bath) # 使最小值为0
-        norm_center = torch.norm(center,dim=-1,keepdim=True)
-        norm_center = norm_center.repeat(1, 1, D)
-        center = center / norm_center # 完成归一化, 归一化后感觉距离相差不大了, 不知道会有什么影响 # [B,3,3]
+        # min_bath = torch.min(centroid.view(B,-1),dim=-1,keepdim=True)[0]    # 找到最小值
+        # min_bath = torch.min(min_bath, torch.tensor(0.)) # 最小值不大于0
+        # min_bath = min_bath.view(B, 1, 1).repeat(1, N, D)
+        # center = centroid + torch.abs(min_bath) # 使最小值为0
+        # norm_center = torch.norm(center,dim=-1,keepdim=True)
+        # norm_center = norm_center.repeat(1, 1, D)
+        # center = center / norm_center # 完成归一化, 归一化后感觉距离相差不大了, 不知道会有什么影响 # [B,3,3]
 
         #取两种张量，S_M 和 M_O 方便后续运算
         if center.shape[1] == 2 :
@@ -189,6 +194,8 @@ class Model(nn.Module):
         
         # 判断除最大值外的两处差值大小, 如果均 <=0,2, 为基础方向,标志为0; 不均 <=0.2 的为多重方向，标志为1
         two_direction = delta[mask_reverse].view(B,-1,2) # [B, 2, 3] --> [B, 2, 2]
+        S_M_2 = S_M[mask_reverse].view(B,-1,2)
+        M_O_2 = M_O[mask_reverse].view(B,-1,2)
         base_direction_mask = (torch.sum(two_direction <= 0.2, dim=-1) != 2).byte()
 
         # 接下来进行重类的判断
@@ -200,9 +207,9 @@ class Model(nn.Module):
         three_repeat_2_mask = three_repeat_mask[:,:,1].byte() # 额外的第二个轴, 为0, 代表该轴的正方向, 为1, 代表该轴的负方向
         # 接下来处理2重类的情况
         repeat_2_class_mask = torch.argmax(two_direction, dim=-1) # 代表在哪个轴上存在额外关系
-        mask = torch.zeros_like(delta, dtype=bool)
+        mask = torch.zeros_like(two_direction, dtype=bool)
         mask = mask.scatter_(-1, repeat_2_class_mask.unsqueeze(-1), 1)
-        two_repate_mask = (S_M[mask].view(B,-1) <= M_O[mask].view(B,-1)).byte() # 0代表该轴正方向, 1代表该轴负方向
+        two_repate_mask = (S_M_2[mask].view(B,-1) <= M_O_2[mask].view(B,-1)).byte() # 0代表该轴正方向, 1代表该轴负方向
 
         direction_list =[] # 作为输出
         for i in range(B):
@@ -265,10 +272,13 @@ class Model(nn.Module):
         for batch_id, flag_one in enumerate(flag):
             if flag_one == 0: # 状况0
                 if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
-                    calculate_center[batch_id, 0] = data['centroid'][batch_id,0]
-                    calculate_center[batch_id, 1] = data['centroid'][batch_id,0]
-                    calculate_center[batch_id, 2] = data['centroid'][batch_id,1]
-                    calculate_center[batch_id, 3] = data['centroid'][batch_id,1]
+                    center_0 = data['centroid'][batch_id,0].view(1,-1)
+                    center_1 = data['centroid'][batch_id,1].view(1,-1)
+                    center_0 ,center_1 = self.norm_two(center_0, center_1)
+                    calculate_center[batch_id, 0] = center_0
+                    calculate_center[batch_id, 1] = center_0
+                    calculate_center[batch_id, 2] = center_1
+                    calculate_center[batch_id, 3] = center_1
                 else:
                     calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id,0]
                     calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id,0]
@@ -276,46 +286,67 @@ class Model(nn.Module):
                     calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id,1]
             elif flag_one == 1: # 状况1
                 if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, subgraph[batch_id, 0]] == 1:
-                    calculate_center[batch_id, 0] = data['centroid'][batch_id, subgraph[batch_id, 0]]
-                    calculate_center[batch_id, 1] = data['centroid'][batch_id, 0]
+                    center_0 = data['centroid'][batch_id, subgraph[batch_id, 0]].view(1,-1)
+                    center_1 = data['centroid'][batch_id, 0].view(1,-1)
+                    center_0 ,center_1 = self.norm_two(center_0, center_1)
+                    calculate_center[batch_id, 0] = center_0
+                    calculate_center[batch_id, 2] = center_1
                 else:
                     calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id, subgraph[batch_id, 0]]
-                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id, 0]
-                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
-                    calculate_center[batch_id, 2] = data['centroid'][batch_id, 0]
-                    calculate_center[batch_id, 3] = data['centroid'][batch_id, 1]
-                else:
                     calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id, 0]
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
+                    center_0 = data['centroid'][batch_id, 0].view(1,-1)
+                    center_1 = data['centroid'][batch_id, 1].view(1,-1)
+                    center_0 ,center_1 = self.norm_two(center_0, center_1)
+                    calculate_center[batch_id, 1] = center_0
+                    calculate_center[batch_id, 3] = center_1
+                else:
+                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id, 0]
                     calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id, 1]
                 
             elif flag_one == 2: # 状况2
                 if data['mask_ture_class'][batch_id, 1] == 1 and data['mask_ture_class'][batch_id, subgraph[batch_id, 1]] == 1:
-                    calculate_center[batch_id, 0] = data['centroid'][batch_id, subgraph[batch_id, 1]]
-                    calculate_center[batch_id, 1] = data['centroid'][batch_id, 1]
+                    center_0 = data['centroid'][batch_id, subgraph[batch_id, 1]].view(1,-1)
+                    center_1 = data['centroid'][batch_id, 1].view(1,-1)
+                    center_0 ,center_1 = self.norm_two(center_0, center_1)
+                    calculate_center[batch_id, 0] = center_0
+                    calculate_center[batch_id, 2] = center_1
                 else:
                     calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id, subgraph[batch_id, 1]]
-                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id, 1]
-                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
-                    calculate_center[batch_id, 2] = data['centroid'][batch_id, 1]
-                    calculate_center[batch_id, 3] = data['centroid'][batch_id, 0]
-                else:
                     calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id, 1]
+                if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
+                    center_0 = data['centroid'][batch_id, 1].view(1,-1)
+                    center_1 = data['centroid'][batch_id, 0].view(1,-1)
+                    center_0 ,center_1 = self.norm_two(center_0, center_1)
+                    calculate_center[batch_id, 1] = center_0
+                    calculate_center[batch_id, 3] = center_1
+                else:
+                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id, 1]
                     calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id, 0]
             elif flag_one == 3: # 状况3
                 if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, subgraph[batch_id, 0]] == 1:
-                    calculate_center[batch_id, 0] = data['centroid'][batch_id, subgraph[batch_id, 0]]
-                    calculate_center[batch_id, 1] = data['centroid'][batch_id, 0]
+                    center_0 = data['centroid'][batch_id, subgraph[batch_id, 0]].view(1,-1)
+                    center_1 = data['centroid'][batch_id, 0].view(1,-1)
+                    center_0 ,center_1 = self.norm_two(center_0, center_1)
+                    calculate_center[batch_id, 0] = center_0
+                    calculate_center[batch_id, 2] = center_1
                 else:
                     calculate_center[batch_id, 0] = data['boxes_center_3d'][batch_id, subgraph[batch_id, 0]]
-                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id, 0]
+                    calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id, 0]
                 if data['mask_ture_class'][batch_id, 0] == 1 and data['mask_ture_class'][batch_id, 1] == 1:
-                    calculate_center[batch_id, 2] = data['centroid'][batch_id, 0]
+                    center_0 = data['centroid'][batch_id, 0].view(1,-1)
+                    center_1 = data['centroid'][batch_id, 1].view(1,-1)
+                    center_0 ,center_1 = self.norm_two(center_0, center_1)
+                    calculate_center[batch_id, 1] = data['centroid'][batch_id, 0]
                     calculate_center[batch_id, 3] = data['centroid'][batch_id, 1]
                 else:
-                    calculate_center[batch_id, 2] = data['boxes_center_3d'][batch_id, 0]
+                    calculate_center[batch_id, 1] = data['boxes_center_3d'][batch_id, 0]
                     calculate_center[batch_id, 3] = data['boxes_center_3d'][batch_id, 1]
                 if data['mask_ture_class'][batch_id, 1] == 1 and data['mask_ture_class'][batch_id, subgraph[batch_id, 1]] == 1:
-                    extral_flag_3_center = torch.cat([extral_flag_3_center, torch.cat([data['centroid'][batch_id, 1:2], data['centroid'][batch_id, subgraph[batch_id, 1]:subgraph[batch_id, 1]+1]], dim=0).unsqueeze(0)], dim=0)
+                    center_0 = data['centroid'][batch_id, 1:2]
+                    center_1 = data['centroid'][batch_id, subgraph[batch_id, 1]:subgraph[batch_id, 1]+1]
+                    center_0 ,center_1 = self.norm_two(center_0, center_1)
+                    extral_flag_3_center = torch.cat([extral_flag_3_center, torch.cat([center_0.view(1,-1), center_1.view(1,-1)], dim=0).unsqueeze(0)], dim=0)
                 else:
                     extral_flag_3_center = torch.cat([extral_flag_3_center, torch.cat([data['boxes_center_3d'][batch_id, 1:2], data['boxes_center_3d'][batch_id, subgraph[batch_id, 1]:subgraph[batch_id, 1]+1]], dim=0).unsqueeze(0)], dim=0)
         return calculate_center, extral_flag_3_center
@@ -345,7 +376,7 @@ class Model(nn.Module):
             elif flag_one == 1:
                 text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {middle_sub} <REL> {rel_1} <OBJ> {sub} <OBJ> {sub} <REL> {rel_2} <OBJ> {obj}'
             elif flag_one == 2:
-                text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {middle_obj}  <REL> {rel_1} <OBJ> {obj} <OBJ> {obj} <REL> {rel_2} <OBJ> {sub}'
+                text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {middle_obj} <REL> {rel_1} <OBJ> {obj} <OBJ> {obj} <REL> {rel_2} <OBJ> {sub}'
             elif flag_one == 3:
                 rel_3 = direction_list_extral[a][0]
                 text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {middle_sub} <REL> {rel_1} <OBJ> {sub} <OBJ> {sub} <REL> {rel_2} <OBJ> {obj} <OBJ> {obj} <REL> {rel_3} <OBJ> {middle_obj}'
@@ -406,8 +437,24 @@ class Model(nn.Module):
                 cv2.putText(img,class_name_one[1] + ' ' + direction_list_extral[extral_id][0] + ' ' + class_name_one[subgraph_one[1]],(0,45),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
                 extral_id = extral_id + 1
                 pass
-            cv2.imwrite('ff.png',img)
+            cv2.imwrite(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd1/{img_id}.png',img)
         pass
+    # def norm(self,data):
+    #     center = data['centroid']
+    #     B,N,D = center.shape
+    #     min_batch = torch.min(center,dim=-2,keepdim=True)[0]
+    #     min_batch = torch.min(min_batch, torch.tensor(0.))
+    #     min_batch = min_batch.repeat(1,N,1)
+    #     center = center + torch.abs(min_batch)
+    #     center = center / torch.norm(center.view(B,-1),dim=-1).view(B,1,1).repeat(1,N,D)
+    #     return center
+    def norm_two(self,center_0, center_1):
+        center = torch.cat([center_0,center_1],dim=0)
+        min_batch = torch.min(center)
+        min_batch = torch.min(min_batch,torch.tensor(0.))
+        center = center + torch.abs(min_batch)
+        center = center / torch.norm(center)
+        return center[0], center[1]
 
 if __name__ == 'main':
     model = Model()

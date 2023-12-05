@@ -11,7 +11,7 @@ python -m torch.distributed.launch \
         --train train \
         --valid val \
         --test test\
-        --batch_size 64 \
+        --batch_size 16 \
         --optim adamw \
         --warmup_ratio 0.05 \
         --lr 5e-5 \

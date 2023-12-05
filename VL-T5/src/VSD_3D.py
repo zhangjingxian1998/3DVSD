@@ -198,7 +198,8 @@ class Trainer(TrainerBase):
                         # time_2 = time.time()
                         
 
-                loss = results['loss'] + score_loss
+                loss = 0.5 * results['loss'] + score_loss
+                # loss = 0.1 * results['loss']
 
                 if self.args.fp16 and _use_native_amp:
                     self.scaler.scale(loss).backward()
@@ -330,7 +331,7 @@ class Trainer(TrainerBase):
             test_score = score_dict['CIDEr'] * 100.
             log_str = ''
             log_str += "\nTest %0.2f" % (test_score)
-
+            print(log_str)
             # evaluator.dump_result(quesid2ans)
 
             # acc_dict_all = evaluator.evaluate_raw(quesid2ans)
@@ -385,6 +386,16 @@ class Trainer(TrainerBase):
                     results = self.model.test_step(batch, r_G)
 
                 pred_ans = results['pred_ans']
+                for i,result in enumerate(pred_ans):
+                    name = batch['batch_entry']['img_id'][i]
+                    true = batch['batch_entry']['sentences'][i]
+                    with open(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd2/{name}.txt', 'w') as t:
+                        t.write('The model output: ')
+                        t.write(result)
+                        t.write('\n')
+                        t.write('The true is: ')
+                        t.write(true)
+                        t.close()
                 # ques_ids = batch['question_ids']
                 ques_ids = batch['batch_entry']['sentences']
 
@@ -445,7 +456,23 @@ class Trainer(TrainerBase):
         for i in range(B):
             input_ids_tensor[i,:length[i]] = input_ids[i]
         return input_ids_tensor
+    
+    def test(self):
+        device = next(self.model.parameters()).device
+        self.vsd_3d_encoder = self.vsd_3d_encoder.to(device)
+        best_path = os.path.join(self.args.output, 'BEST')
+        self.load(best_path)
 
+        target, answer = self.predict(self.test_loader)
+
+        if self.verbose:
+            evaluator = self.test_loader.evaluator
+            score_dict = evaluator.evaluate(target, answer)
+
+            test_score = score_dict['CIDEr'] * 100.
+            log_str = ''
+            log_str += "\nTest %0.2f" % (test_score)
+            print(log_str)
     # def text_process_(self, batch,split_word, split_id, ):
     #     B = batch['vis_feats'].shape[0]
     #     arange = np.arange(B)
@@ -545,8 +572,12 @@ def main_worker(gpu, args, total3d_model, vsd_3d_encoder):
             topk=args.valid_topk,
         )
         trainer.submit_test_loader = submit_test_loader
+    if args.test_only:
+        trainer.test()
+    else:
+        trainer.train()
 
-    trainer.train()
+    
 
 if __name__ == "__main__":
     cudnn.benchmark = True

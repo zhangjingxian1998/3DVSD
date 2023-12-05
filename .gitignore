@@ -14,3 +14,4 @@ VL-T5/bart-base
 log
 *.png
 .gitignore
+*.txt

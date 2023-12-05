@@ -1,13 +1,14 @@
 # The name of experiment 通过预训练, 使模型对于 <OBJ> 和 <REL> 进行学习
 name=VLT5
 
-output=VL-T5/snap/VSD_3D/final/$name
+output=VL-T5/snap/VSD_3D/final/vsd2/$name
 
 PYTHONPATH=$PYTHONPATH:./src \
 python -m torch.distributed.launch \
     --nproc_per_node=$1 \
     VL-T5/src/VSD_3D.py \
         --distributed --multiGPU --fp16 \
+        --data VSDv2 \
         --train train \
         --valid val \
         --test test\
@@ -25,3 +26,4 @@ python -m torch.distributed.launch \
         --load 'VL-T5/snap/VSD_3D/pretrain/VLT5/BEST' \
         --num_beams 5 \
         --valid_batch_size 100 \
+        # --test_only

@@ -203,7 +203,13 @@ class Trainer(TrainerBase):
                         scaled_loss.backward()
                 else:
                     loss.backward()
-
+                gradients = [param.grad for param in self.model.parameters()]
+                for name, param in self.model.named_parameters():
+                    if param.grad is None:
+                        print(f"Gradient of layer {name} is None.")
+                for name, param in self.vsd_3d_encoder.named_parameters():
+                    if param.grad is None:
+                        print(f"Gradient of layer {name} is None.")
                 loss = loss.detach()
 
                 # Update Parameters
@@ -367,6 +373,11 @@ class Trainer(TrainerBase):
                     results = self.model.test_step(batch, r_G)
 
                 pred_ans = results['pred_ans']
+                for i,result in enumerate(pred_ans):
+                    name = batch['batch_entry']['img_id']
+                    # with open(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd1/{name}.txt', 'w') as t:
+                    #     t.write(result)
+                    #     t.close()
                 # ques_ids = batch['question_ids']
                 ques_ids = batch['batch_entry']['sentences']
 
@@ -468,6 +479,22 @@ class Trainer(TrainerBase):
     #     for i in range(B):
     #         input_ids_tensor[i,:length[i]] = input_ids[i]
     #     return input_ids_tensor
+    def test(self):
+        device = next(self.model.parameters()).device
+        self.vsd_3d_encoder = self.vsd_3d_encoder.to(device)
+        # best_path = os.path.join(self.args.output, 'BEST')
+        # self.load(best_path)
+
+        target, answer = self.predict(self.test_loader)
+
+        if self.verbose:
+            evaluator = self.test_loader.evaluator
+            score_dict = evaluator.evaluate(target, answer)
+
+            test_score = score_dict['CIDEr'] * 100.
+            log_str = ''
+            log_str += "\nTest %0.2f" % (test_score)
+            print(log_str)
 
 def main_worker(gpu, args, total3d_model, vsd_3d_encoder):
     # GPU is assigned
@@ -527,8 +554,12 @@ def main_worker(gpu, args, total3d_model, vsd_3d_encoder):
             topk=args.valid_topk,
         )
         trainer.submit_test_loader = submit_test_loader
+    if args.test_only:
+        trainer.test()
+    else:
+        trainer.train()
 
-    trainer.train()
+
 
 if __name__ == "__main__":
     cudnn.benchmark = True
@@ -561,8 +592,8 @@ if __name__ == "__main__":
     ##############################################
     # --distributed 
     # --multiGPU
-    args.distributed = True
-    args.multiGPU = True
+    args.distributed = False
+    args.multiGPU = False
     args.train = 'train'
     args.valid = 'val'
     args.test = 'test'
@@ -576,13 +607,14 @@ if __name__ == "__main__":
     args.load = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/pretrain/VLT5/BEST'
     # args.backbone = 'VL-T5/bart-base'
     # args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
-    # args.output = 'VL-T5/snap/sp/baseline/test'
+    args.output = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/final/VLT5'
     # args.load = None
     args.num_beams = 5
     args.batch_size = 8
-    args.valid_batch_size = 100
-    args.local_rank = 0
+    args.valid_batch_size = 1
+    args.local_rank = 1
     args.max_text_length = 40
+    args.test_only = True
     # args.vsd_pretrain = True
     ##############################################
 
@@ -610,5 +642,5 @@ if __name__ == "__main__":
 
     #     args.run_name = run_name
 
-    if args.distributed:
-        main_worker(args.local_rank, args, total3d_model, vsd_3d_encoder)
+    # if args.distributed:
+    main_worker(args.local_rank, args, total3d_model, vsd_3d_encoder)
