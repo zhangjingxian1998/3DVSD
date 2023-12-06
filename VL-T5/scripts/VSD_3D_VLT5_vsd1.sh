@@ -1,7 +1,7 @@
 # The name of experiment 通过预训练, 使模型对于 <OBJ> 和 <REL> 进行学习
 name=VLT5
 
-output=VL-T5/snap/VSD_3D/final/$name
+output=VL-T5/snap/VSD_3D/final/vsd1/$name
 
 PYTHONPATH=$PYTHONPATH:./src \
 python -m torch.distributed.launch \

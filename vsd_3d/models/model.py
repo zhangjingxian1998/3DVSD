@@ -100,7 +100,7 @@ class Model(nn.Module):
             direction_list_extral = None
             if extral_flag_3_center.shape[0]:
                 direction_list_extral = self.calculate_direction(extral_flag_3_center)
-            self.visualize(img_id,direction_list,direction_list_extral,data['boxes_center_3d_show'],subgraph,flag, class_name)
+            # self.visualize(img_id,direction_list,direction_list_extral,data['boxes_center_3d_show'],subgraph,flag, class_name)
             # TODO 接下来根据flag的不同, 生成不同的提示语句
             time_5 = time.time()
             # 返回子图中间节点类别

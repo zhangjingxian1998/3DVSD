@@ -358,7 +358,8 @@ class Trainer(TrainerBase):
             gen_kwargs = {}
             gen_kwargs['num_beams'] = self.args.num_beams
             gen_kwargs['max_length'] = self.args.gen_max_length
-
+            num_beams = self.args.num_beams
+            max_length = self.args.gen_max_length
             quesid2ans = {}
             target = []
             answer = []
@@ -368,9 +369,9 @@ class Trainer(TrainerBase):
                 r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
-                    results = self.model.module.test_step(batch, r_G)
+                    results = self.model.module.test_step(batch, r_G,**gen_kwargs)
                 else:
-                    results = self.model.test_step(batch, r_G)
+                    results = self.model.test_step(batch, r_G,**gen_kwargs)
 
                 pred_ans = results['pred_ans']
                 for i,result in enumerate(pred_ans):
@@ -607,14 +608,15 @@ if __name__ == "__main__":
     args.load = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/pretrain/VLT5/BEST'
     # args.backbone = 'VL-T5/bart-base'
     # args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
-    args.output = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/final/VLT5'
+    args.output = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/final/vsd1/VLT5'
     # args.load = None
     args.num_beams = 5
-    args.batch_size = 8
+    args.batch_size = 1
     args.valid_batch_size = 1
     args.local_rank = 1
     args.max_text_length = 40
-    args.test_only = True
+    # args.test_only = True
+    args.data = 'VSDv1'
     # args.vsd_pretrain = True
     ##############################################
 

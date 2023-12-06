@@ -87,9 +87,9 @@ class VLT53DVSD(VLT5):
     def test_step(self, batch, r_G, **kwargs):
         self.eval()
         if r_G is None:
-            kwargs = {}
+            pass
         else:
-            kwargs = {'r_G':r_G}
+            kwargs.update({'r_G':r_G})
         device = next(self.parameters()).device
         vis_feats = batch['vis_feats'].to(device)
         batch = batch['batch_entry']
@@ -224,9 +224,11 @@ class VLBart3DVSD(VLBart):
     def test_step(self, batch, r_G,**kwargs):
         self.eval()
         if r_G is None:
-            kwargs = {}
+            pass
         else:
-            kwargs = {'r_G':r_G}
+            kwargs.update({'r_G':r_G})
+        num_beams = kwargs['num_beams']
+        max_length = kwargs['max_length']
         device = next(self.parameters()).device
         vis_feats = batch['vis_feats'].to(device)
         batch = batch['batch_entry']

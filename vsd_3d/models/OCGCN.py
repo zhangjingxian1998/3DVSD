@@ -21,8 +21,12 @@ class OcGCN(nn.Module):
         self.vison = FFN(in_feature = 768, 
                          middle_feature = 3072, 
                          out_feature = 768)
+        # self.edge_up = nn.Sequential(
+        #     nn.Linear(1,768),
+        #     nn.LayerNorm(768)
+        # )
         self.edge_up = nn.Sequential(
-            nn.Linear(1,768),
+            nn.Linear(3,768),
             nn.LayerNorm(768)
         )
         self.edge = FFN(in_feature=768,middle_feature=3072,out_feature=768)
@@ -119,16 +123,19 @@ class OcGCN(nn.Module):
         # A·B = |A||B|cos(radian)
         local_V = centroid.unsqueeze(2).repeat(1,1,N,1) # [B, N, 3] --> [B, N, 1, 3] --> [B, N, N, 3]
         local_H = centroid.unsqueeze(1).repeat(1,N,1,1) # [B, N, 3] --> [B, 1, N, 3] --> [B, N, N, 3]
-        # 计算点积
-        dot_product = torch.sum(local_V * local_H, dim=-1)
-        # 计算向量模长
-        norm_local_V = torch.norm(local_V,dim=-1)
-        norm_local_H = torch.norm(local_H,dim=-1)
-        # 计算夹角的余弦值
-        # radian = arccos[(A·B)/(|A||B|)]
-        s_e = dot_product / (norm_local_V * norm_local_H)
+        # # 计算点积
+        # dot_product = torch.sum(local_V * local_H, dim=-1)
+        # # 计算向量模长
+        # norm_local_V = torch.norm(local_V,dim=-1)
+        # norm_local_H = torch.norm(local_H,dim=-1)
+        # # 计算夹角的余弦值
+        # # radian = arccos[(A·B)/(|A||B|)]
+        # s_e = dot_product / (norm_local_V * norm_local_H)
 
-        s_e = self.edge_up(s_e.view(B, N*N, 1))
+        s_e = local_V + local_H
+        s_e = s_e/(torch.norm(s_e.view(B,-1),dim=-1).view(B,1,1,1).repeat(1,N,N,3))
+        
+        s_e = self.edge_up(s_e.view(B, N*N, -1))
         s_e = self.edge(s_e)                                # 每个batch展平送入网络处理 [B, N, N] --> [B, N*N, 1] --> [B, N*N, D]
         s_e = s_e.view(B, N, N, -1) * adjacency_matrix_mask_float    # 网络处理完恢复尺寸 [B, N*N, D] --> [B, N, N, D] 并仅使存在关系的边保持梯度
         return vision, s_e
@@ -169,6 +176,7 @@ class OcGCN(nn.Module):
         # 确保角度在0到360度之间
         mask = torch.cross(oritation, camera_x_vector)[:,:,1]<0
         angle_degrees[mask] = 360 - angle_degrees[mask]
+        angle_degrees[angle_degrees>=360] = 0
         index = angle_degrees // one_step # 确定方位属于哪个分区
         return index
     

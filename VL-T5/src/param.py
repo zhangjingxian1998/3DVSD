@@ -166,7 +166,7 @@ def parse_args(parse=True, **optional_kwargs):
     # Extral
     parser.add_argument("--vsd_pretrain", action='store_true')
     parser.add_argument("--vl_pretrain", action='store_true')
-    parser.add_argument("--data", type=str, required=True)
+    parser.add_argument("--data", type=str)
 
     # Parse the arguments.
     if parse:

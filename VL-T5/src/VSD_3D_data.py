@@ -270,7 +270,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             ###### Image ######
             if self.args.use_vision:
                 img_id = datum['img_id']
-                # img_id = '22'
+                # img_id = '60'
                 out_dict['img_id'] = img_id
 
                 # Normalize the boxes (to 0 ~ 1)

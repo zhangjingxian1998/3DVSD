@@ -381,21 +381,21 @@ class Trainer(TrainerBase):
                 r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
-                    results = self.model.module.test_step(batch, r_G)
+                    results = self.model.module.test_step(batch, r_G, **gen_kwargs)
                 else:
-                    results = self.model.test_step(batch, r_G)
+                    results = self.model.test_step(batch, r_G, **gen_kwargs)
 
                 pred_ans = results['pred_ans']
                 for i,result in enumerate(pred_ans):
                     name = batch['batch_entry']['img_id'][i]
                     true = batch['batch_entry']['sentences'][i]
-                    with open(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd2/{name}.txt', 'w') as t:
-                        t.write('The model output: ')
-                        t.write(result)
-                        t.write('\n')
-                        t.write('The true is: ')
-                        t.write(true)
-                        t.close()
+                    # with open(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd2/{name}.txt', 'w') as t:
+                    #     t.write('The model output: ')
+                    #     t.write(result)
+                    #     t.write('\n')
+                    #     t.write('The true is: ')
+                    #     t.write(true)
+                    #     t.close()
                 # ques_ids = batch['question_ids']
                 ques_ids = batch['batch_entry']['sentences']
 
