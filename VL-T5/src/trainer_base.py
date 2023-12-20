@@ -193,7 +193,6 @@ class TrainerBase(object):
 
     def load_checkpoint(self, ckpt_path):
         if self.args.VL_pretrain:
-        # if True:
             if 't5' in self.args.backbone:
                 origin_different_keys = [
                     'shared.weight',

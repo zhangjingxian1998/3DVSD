@@ -26,4 +26,5 @@ python -m torch.distributed.launch \
         --load 'VL-T5/snap/VSD_3D/pretrain/VLT5/BEST' \
         --num_beams 5 \
         --valid_batch_size 100 \
+        --save_result_path 'save_img_vsd1'
         # --test_only

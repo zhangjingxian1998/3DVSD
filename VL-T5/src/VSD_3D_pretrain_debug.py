@@ -88,8 +88,8 @@ class Trainer(TrainerBase):
         self.model = self.create_model(model_class, config, **model_kwargs)
 
         if 't5' in self.args.tokenizer: # 可以观察一下更改tokenizer长度后是否还可以加载权重 # 新添加词汇后, 原有的权重编码被保留, 后加的词汇初始化编码为固定的, 似乎有什么东西在控制
-            self.model.resize_token_embeddings(self.tokenizer.vocab_size)
-            # self.model.resize_token_embeddings(len(self.tokenizer))
+            # self.model.resize_token_embeddings(self.tokenizer.vocab_size)
+            self.model.resize_token_embeddings(len(self.tokenizer))
         elif 'bart' in self.args.tokenizer:
             self.model.resize_token_embeddings(self.model.model.shared.num_embeddings + num_added_toks)
 
@@ -564,15 +564,17 @@ if __name__ == "__main__":
     args.epochs = 20
     args.num_workers = 0
     args.output = 'VL-T5/snap/baseline/VSD_3D'
-    # args.backbone = 'VL-T5/t5-base'
+    args.backbone = 'VL-T5/t5-base'
+    # args.backbone = 'VL-T5/bart-base'
     # args.load = 'VL-T5/snap/pretrain/VLT5/Epoch30'
-    args.backbone = 'VL-T5/bart-base'
-    args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
+    args.load = 'VL-T5/snap/VSD_3D/pretrain/VLT5/BEST'
     # args.load = None
     args.num_beams = 5
     args.batch_size = 32
     args.valid_batch_size = 100
     args.local_rank = 0
+    args.data='VSDv2'
+    args.VL_pretrain=True
     ##############################################
 
 

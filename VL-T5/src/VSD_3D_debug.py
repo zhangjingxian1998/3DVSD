@@ -35,7 +35,7 @@ proj_dir = Path(__file__).resolve().parent.parent
 
 _use_native_amp = False
 _use_apex = False
-
+predict_list = ["to the left of", "to the right of", "in front of","next to", "above","behind","under","on","in"]
 # Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
 if version.parse(torch.__version__) < version.parse("1.6"):
     from transormers.file_utils import is_apex_available
@@ -366,6 +366,8 @@ class Trainer(TrainerBase):
             if self.verbose:
                 pbar = tqdm(total=len(loader), ncols=120, desc="Prediction")
             for i, batch in enumerate(loader):
+                if i != 9:
+                    continue
                 r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
@@ -373,7 +375,15 @@ class Trainer(TrainerBase):
                 else:
                     results = self.model.test_step(batch, r_G,**gen_kwargs)
 
-                pred_ans = results['pred_ans']
+                pred_ans = results['pred_ans'][0]
+                if self.args.replace_rel:
+                    rel_list = batch['batch_entry']['sub_rel_obj']
+                    for i,result in enumerate(pred_ans):
+                        rel_gt = rel_list[i][1]
+                        for rel in predict_list:
+                            if rel in result:
+                                pred_ans[i] = result.replace(rel,rel_gt)
+                                break
                 for i,result in enumerate(pred_ans):
                     name = batch['batch_entry']['img_id']
                     # with open(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd1/{name}.txt', 'w') as t:
@@ -483,8 +493,8 @@ class Trainer(TrainerBase):
     def test(self):
         device = next(self.model.parameters()).device
         self.vsd_3d_encoder = self.vsd_3d_encoder.to(device)
-        # best_path = os.path.join(self.args.output, 'BEST')
-        # self.load(best_path)
+        best_path = os.path.join(self.args.output, 'BEST.pth')
+        self.load_checkpoint(best_path)
 
         target, answer = self.predict(self.test_loader)
 
@@ -608,15 +618,16 @@ if __name__ == "__main__":
     args.load = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/pretrain/VLT5/BEST'
     # args.backbone = 'VL-T5/bart-base'
     # args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
-    args.output = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/final/vsd1/VLT5'
+    args.output = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/final/vsd2/VLT5'
     # args.load = None
     args.num_beams = 5
     args.batch_size = 1
     args.valid_batch_size = 1
     args.local_rank = 1
     args.max_text_length = 40
-    # args.test_only = True
-    args.data = 'VSDv1'
+    args.test_only = True
+    args.data = 'VSDv2'
+    # args.replace_rel = True
     # args.vsd_pretrain = True
     ##############################################
 

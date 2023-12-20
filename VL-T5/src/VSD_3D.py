@@ -33,7 +33,8 @@ proj_dir = Path(__file__).resolve().parent.parent
 
 _use_native_amp = False
 _use_apex = False
-
+predict_list = ["to the left of", "to the right of", "in front of","next to", "above","behind","under","on","in"]
+dudu = []
 # Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
 if version.parse(torch.__version__) < version.parse("1.6"):
     from transormers.file_utils import is_apex_available
@@ -172,7 +173,11 @@ class Trainer(TrainerBase):
                 # time_0 = time.time()
                 r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
                 #####################################################################################
-                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
+                if args.use_prefix:
+                    pass
+                else:
+                    batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
+                # print(batch['batch_entry']['inpu'])
                 # time_1 = time.time()
 
                 # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
@@ -198,7 +203,7 @@ class Trainer(TrainerBase):
                         # time_2 = time.time()
                         
 
-                loss = 0.5 * results['loss'] + score_loss
+                loss = 0.1 * results['loss'] + 0.9 * score_loss
                 # loss = 0.1 * results['loss']
 
                 if self.args.fp16 and _use_native_amp:
@@ -375,27 +380,53 @@ class Trainer(TrainerBase):
             quesid2ans = {}
             target = []
             answer = []
+            dudu = []
+            rel_gt = []
             if self.verbose:
                 pbar = tqdm(total=len(loader), ncols=120, desc="Prediction")
             for i, batch in enumerate(loader):
                 r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
-                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
+                if self.args.use_prefix:
+                    pass
+                else:
+                    batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
                     results = self.model.module.test_step(batch, r_G, **gen_kwargs)
                 else:
                     results = self.model.test_step(batch, r_G, **gen_kwargs)
 
                 pred_ans = results['pred_ans']
-                for i,result in enumerate(pred_ans):
-                    name = batch['batch_entry']['img_id'][i]
-                    true = batch['batch_entry']['sentences'][i]
-                    # with open(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd2/{name}.txt', 'w') as t:
-                    #     t.write('The model output: ')
-                    #     t.write(result)
-                    #     t.write('\n')
-                    #     t.write('The true is: ')
-                    #     t.write(true)
-                    #     t.close()
+                if self.args.get_rel:
+                    rel_list = batch['batch_entry']['sub_rel_obj']
+                    for j,result in enumerate(pred_ans):
+                        flag = True
+                        rel_gt.append(rel_list[j][1])
+                        for rel in predict_list:
+                            if rel in result:
+                                dudu.append(rel)
+                                flag = False
+                                break
+                        if flag:
+                            dudu.append('None')
+                if self.args.replace_rel:
+                    rel_list = batch['batch_entry']['sub_rel_obj']
+                    for j,result in enumerate(pred_ans):
+                        rel_gt = rel_list[j][1]
+                        for rel in predict_list:
+                            if rel in result:
+                                pred_ans[j] = result.replace(rel,rel_gt)
+                                break
+                if self.args.visualize:
+                    for i,result in enumerate(pred_ans):
+                        name = batch['batch_entry']['img_id'][i]
+                        true = batch['batch_entry']['sentences'][i]
+                        with open(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd2/{name}.txt', 'w') as t:
+                            t.write('The model output: ')
+                            t.write(result)
+                            t.write('\n')
+                            t.write('The true is: ')
+                            t.write(true)
+                            t.close()
                 # ques_ids = batch['question_ids']
                 ques_ids = batch['batch_entry']['sentences']
 
@@ -409,7 +440,12 @@ class Trainer(TrainerBase):
 
             if self.verbose:
                 pbar.close()
-
+            if self.args.get_rel:
+                import numpy as np
+                dudu = np.array(dudu,dtype='object')
+                rel_gt = np.array(rel_gt,dtype='object')
+                np.save('rel_save/vl/vl_rel.npy',dudu)
+                np.save('rel_save/gt/gt_rel.npy',rel_gt)
         if self.args.distributed:
             dist.barrier()
 
@@ -463,7 +499,9 @@ class Trainer(TrainerBase):
         best_path = os.path.join(self.args.output, 'BEST')
         self.load(best_path)
 
-        target, answer = self.predict(self.test_loader)
+        # target, answer = self.predict(self.test_loader)
+        # target, answer = self.predict(self.train_loader)
+        target, answer = self.predict(self.val_loader)
 
         if self.verbose:
             evaluator = self.test_loader.evaluator

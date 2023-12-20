@@ -54,28 +54,30 @@ class VLT53DVSD(VLT5):
             loss = self.bce_loss(logit, target)
 
         else:
+            reduce_loss = True
             lm_labels = batch["target_ids"].to(device)
             output = self(
                 input_ids=input_ids,
                 vis_inputs=(vis_feats, vis_pos),
                 labels=lm_labels,
                 return_dict=True,
+                reduce_loss=reduce_loss,
                 **kwargs
             )
             assert 'loss' in output
 
-            lm_mask = (lm_labels != -100).float()
-            B, L = lm_labels.size()
+            # lm_mask = (lm_labels != -100).float()
+            # B, L = lm_labels.size()
 
             loss = output['loss']
 
-            loss = loss.view(B, L) * lm_mask
+            # loss = loss.view(B, L) * lm_mask
 
-            loss = loss.sum(dim=1) / lm_mask.sum(dim=1).clamp(min=1)  # B
+            # loss = loss.sum(dim=1) / lm_mask.sum(dim=1).clamp(min=1)  # B
 
-            # loss = loss * batch['scores'].to(device=device)
+            # # loss = loss * batch['scores'].to(device=device)
 
-            loss = loss.mean()
+            # loss = loss.mean()
 
         result = {
             'loss': loss
@@ -95,6 +97,8 @@ class VLT53DVSD(VLT5):
         batch = batch['batch_entry']
         input_ids = batch['input_ids'].to(device)
         vis_pos = batch['boxes'].to(device)
+        num_beams = kwargs['num_beams']
+        max_length = kwargs['max_length']
 
         result = {}
         if self.config.classifier:
@@ -124,9 +128,69 @@ class VLT53DVSD(VLT5):
             result['pred_ans'] = pred_ans
 
         else:
+            # if self.args.s3_search:
+            #     force_words = []
+            #     output = self.generate(
+            #         input_ids=input_ids,
+            #         vis_inputs=(vis_feats, vis_pos),
+            #         **kwargs
+            #     )
+            # else:
+            def prefix_allowed_tokens_fn_9(batch_id, sent):
+                # 如果是生成的第一个令牌，只允许与前缀匹配的令牌
+                if sent[-1] == self.tokenizer.encode('fork',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('on',add_special_tokens=False)]
+                    return allow_list
+                elif sent[-1] == self.tokenizer.encode('on',add_special_tokens=False)[-1] and sent[-2]==self.tokenizer.encode('fork',add_special_tokens=False)[-1] :
+                    allow_list = [self.tokenizer.encode('the',add_special_tokens=False)]
+                    return allow_list
+                elif sent[-1] == self.tokenizer.encode('the',add_special_tokens=False)[-1] and sent[-2]==self.tokenizer.encode('on',add_special_tokens=False)[-1] :
+                    allow_list = [self.tokenizer.encode('plate',add_special_tokens=False)]
+                    return allow_list
+                else:
+                    # 其他情况不限制
+                    allow_list = list(range(self.tokenizer.vocab_size))
+                    return allow_list
+            def prefix_allowed_tokens_fn_11(batch_id, sent):
+                allow_list = None
+                if sent[-1] == self.tokenizer.encode('asparagus',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('under',add_special_tokens=False)]
+                elif sent[-1] == self.tokenizer.encode('under',add_special_tokens=False)[-1] and sent[-2] == self.tokenizer.encode('asparagus',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('the',add_special_tokens=False)]
+                elif sent[-1] == self.tokenizer.encode('the',add_special_tokens=False)[-1] and sent[-2] == self.tokenizer.encode('under',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('basket',add_special_tokens=False)]
+
+                if sent[-1] == self.tokenizer.encode('squash',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('to',add_special_tokens=False)]
+                elif sent[-1] == self.tokenizer.encode('to',add_special_tokens=False)[-1] and sent[-2] == self.tokenizer.encode('squash',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('the',add_special_tokens=False)]
+                elif sent[-1] == self.tokenizer.encode('the',add_special_tokens=False)[-1] and sent[-2] == self.tokenizer.encode('to',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('left',add_special_tokens=False)]
+                elif sent[-1] == self.tokenizer.encode('left',add_special_tokens=False)[-1] and sent[-2] == self.tokenizer.encode('the',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('and',add_special_tokens=False)]
+                elif sent[-1] == self.tokenizer.encode('and',add_special_tokens=False)[-1] and sent[-2] == self.tokenizer.encode('left',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('down',add_special_tokens=False)]
+                elif sent[-1] == self.tokenizer.encode('down',add_special_tokens=False)[-1] and sent[-2] == self.tokenizer.encode('and',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('of',add_special_tokens=False)]
+                elif sent[-1] == self.tokenizer.encode('of',add_special_tokens=False)[-1] and sent[-2] == self.tokenizer.encode('down',add_special_tokens=False)[-1]:
+                    allow_list = [self.tokenizer.encode('book',add_special_tokens=False)]
+                if allow_list:
+                    return allow_list
+                pass
+            force_word = 'on the plate'
+
+            force_word1 = 'under the basket'
+            force_word2 = 'to the left of book'
+            force_words_ids = [
+                                self.tokenizer(force_word1, add_special_tokens=False).input_ids,
+                               self.tokenizer(force_word2, add_special_tokens=False).input_ids,
+                               ]
             output = self.generate(
                 input_ids=input_ids,
+                # force_words_ids=force_words_ids,
                 vis_inputs=(vis_feats, vis_pos),
+                # prefix_allowed_tokens_fn=prefix_allowed_tokens_fn_11,
+                num_return_sequences=num_beams,
                 **kwargs
             )
             generated_sents = self.tokenizer.batch_decode(output, skip_special_tokens=True)

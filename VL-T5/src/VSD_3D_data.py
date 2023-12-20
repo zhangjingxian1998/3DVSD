@@ -28,6 +28,17 @@ vrd_img_dir = vrd_dir.joinpath('images/')
 vrd_feature_dir = vrd_dir.joinpath('features')
 
 predicate = ["on", "to the left of", "under", "behind", "to the right of", "in", "next to", "in front of", "above"]
+predicate_dict = {
+    'on':'<extra_id_27>',
+    "to the left of":'<extra_id_28>',
+    "under":'<extra_id_29>',
+    "behind":'<extra_id_30>',
+    "to the right of":'<extra_id_31>',
+    "in":'<extra_id_32>',
+    "next to":'<extra_id_33>',
+    "in front of":'<extra_id_34>',
+    "above":'<extra_id_35>'
+}
 predicate_map = {p: i for i, p in enumerate(predicate)}
 synonyms = {
     'on':['upon', 'over'],
@@ -246,9 +257,9 @@ class VSD_3D_FineTuneDataset(Dataset):
 
             # 先不tolist(), 将所有位置替换完后再tolist()
             ##################################################################################
-            
+            out_dict['subject_and_objects'] = subject_and_object
             # out_dict['input_text'] = input_text
-            
+            subject_and_object[1] = predicate_dict[subject_and_object[1]]
             target_text = ','.join(subject_and_object)
             out_dict['pretrain_target'] = target_text
             if 't5' in self.args.tokenizer:
@@ -267,6 +278,8 @@ class VSD_3D_FineTuneDataset(Dataset):
 
             datum = self.data[idx]
 
+            prefix = 'describe image with tags and relation:'
+            input_tokens = [prefix]
             ###### Image ######
             if self.args.use_vision:
                 img_id = datum['img_id']
@@ -333,7 +346,22 @@ class VSD_3D_FineTuneDataset(Dataset):
 
             # 不能直接在这里转input_id，因为子图没有，没有办法生成
             ###########   TEXT   ###################################################################### TODO(zhangjignxian) 输入词替换
-            # subject_and_object = datum['subject_and_objects'][0] # 取sub和obj
+            subject_and_object = datum['subject_and_objects'][0] # 取sub和obj
+            out_dict['subject_and_objects'] = subject_and_object
+            input_tokens.append(subject_and_object[0])
+            input_tokens.append(subject_and_object[2])
+            input_text = ' '.join(input_tokens)
+            if 't5' in self.args.tokenizer:
+                input_ids = self.tokenizer.encode(
+                    input_text,
+                    max_length=self.args.max_text_length, truncation=True)
+            elif 'bart' in self.args.tokenizer:
+                input_ids = self.tokenizer.encode(
+                    input_text,
+                    max_length=self.args.max_text_length, truncation=True)
+            else:
+                input_ids = self.tokenizer.convert_tokens_to_ids(
+                    self.tokenizer.tokenize(input_text)[:self.args.max_text_length - 1] + ['[SEP]'])
             # sub = subject_and_object[0]
             # rel_gt = subject_and_object[1]
             # obj = subject_and_object[2]
@@ -351,10 +379,10 @@ class VSD_3D_FineTuneDataset(Dataset):
             # 先不tolist(), 将所有位置替换完后再tolist()
             ##################################################################################
             
-            # out_dict['input_text'] = input_text
+            out_dict['input_text'] = input_text
 
-            # out_dict['input_ids'] = torch.LongTensor(input_ids)
-            # out_dict['input_length'] = len(input_ids)
+            out_dict['input_ids'] = torch.LongTensor(input_ids)
+            out_dict['input_length'] = len(input_ids)
             
             # if datum['is_train']:
             sent = datum['sent'].strip()
@@ -381,6 +409,7 @@ class VSD_3D_FineTuneDataset(Dataset):
         img_paths = []
         input_text = []
         sentences = []
+        sub_rel_obj = []
         if self.args.VL_pretrain:
             if self.args.use_vision:
                 V_L = max(entry['out_dict']['n_boxes'] for entry in batch)
@@ -402,6 +431,7 @@ class VSD_3D_FineTuneDataset(Dataset):
                     vis_attention_mask[i, :n_boxes] = 1
                     img_ids.append(entry['out_dict']['img_id'])
                     target_ids[i, :entry['out_dict']['pretrain_target_id_length']] = entry['out_dict']['pretrain_target_id']
+                    sub_rel_obj.append(entry['out_dict']['subject_and_objects'])
 
                 # if 'input_text' in entry['out_dict']:
                 #     input_text.append(entry['out_dict']['input_text'])
@@ -423,6 +453,7 @@ class VSD_3D_FineTuneDataset(Dataset):
             word_mask = target_ids != self.tokenizer.pad_token_id
             target_ids[~word_mask] = -100
             batch_entry['target_ids'] = target_ids
+            batch_entry['sub_rel_obj'] = sub_rel_obj
 
             # vsd_3d 需要输入经过total3d处理后的 
             # 外参矩阵:r_ex 
@@ -470,6 +501,10 @@ class VSD_3D_FineTuneDataset(Dataset):
             if 'target_ids' in batch[0]['out_dict']:
                 T_W_L = max(entry['out_dict']['target_length'] for entry in batch)
                 target_ids = torch.ones(B, T_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
+            
+            if 'input_ids' in batch[0]['out_dict']:
+                S_W_L = max(entry['out_dict']['input_length'] for entry in batch)
+                input_ids = torch.ones(B, S_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
 
             for i, entry in enumerate(batch):
                 if self.args.use_vision:
@@ -478,12 +513,16 @@ class VSD_3D_FineTuneDataset(Dataset):
                     vis_feats[i, :n_boxes] = entry['out_dict']['vis_feats']
                     vis_attention_mask[i, :n_boxes] = 1
                     img_ids.append(entry['out_dict']['img_id'])
+                    sub_rel_obj.append(entry['out_dict']['subject_and_objects'])
+                
+                if 'input_ids' in entry['out_dict']:
+                    input_ids[i, :entry['out_dict']['input_length']] = entry['out_dict']['input_ids']
 
                 if 'target_ids' in entry['out_dict']:
                     target_ids[i, :entry['out_dict']['target_length']] = entry['out_dict']['target_ids']
 
-                # if 'input_text' in entry['out_dict']:
-                #     input_text.append(entry['out_dict']['input_text'])
+                if 'input_text' in entry['out_dict']:
+                    input_text.append(entry['out_dict']['input_text'])
 
                 sentences.append(entry['out_dict']['sent'])
 
@@ -491,8 +530,8 @@ class VSD_3D_FineTuneDataset(Dataset):
                     targets.append(entry['out_dict']['targets'])
                 
 
-
-            # batch_entry['input_ids'] = input_ids
+            if 'input_ids' in batch[0]['out_dict']:
+                batch_entry['input_ids'] = input_ids
             if 'target_ids' in batch[0]['out_dict']:
                 word_mask = target_ids != self.tokenizer.pad_token_id
                 target_ids[~word_mask] = -100
@@ -514,6 +553,8 @@ class VSD_3D_FineTuneDataset(Dataset):
             batch_entry['targets'] = targets
 
             batch_entry['sentences'] = sentences
+
+            batch_entry['sub_rel_obj'] = sub_rel_obj
 
             batch_entry['task'] = 'caption'
 

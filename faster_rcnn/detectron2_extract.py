@@ -90,7 +90,7 @@ def doit(raw_image, predictor):
         # Generate proposals with RPN
         proposals, _ = predictor.model.proposal_generator(
             images, features, None)
-        proposal = proposals[0]
+        # proposal = proposals[0]
         # print('Proposal Boxes size:', proposal.proposal_boxes.tensor.shape)
 
         # Run RoI head for each proposal (RoI Pooling + Res5)
@@ -115,8 +115,8 @@ def doit(raw_image, predictor):
         probs = outputs.predict_probs()[0]
         boxes = outputs.predict_boxes()[0]
 
-        attr_prob = pred_attr_logits[..., :-1].softmax(-1)
-        max_attr_prob, max_attr_label = attr_prob.max(-1)
+        # attr_prob = pred_attr_logits[..., :-1].softmax(-1)
+        # max_attr_prob, max_attr_label = attr_prob.max(-1)
 
         # Note: BUTD uses raw RoI predictions,
         #       we use the predicted boxes instead.
@@ -132,15 +132,15 @@ def doit(raw_image, predictor):
                 break
 
         instances = detector_postprocess(instances, raw_height, raw_width)
-        roi_features = feature_pooled[ids].detach()
-        max_attr_prob = max_attr_prob[ids].detach()
-        max_attr_label = max_attr_label[ids].detach()
-        instances.attr_scores = max_attr_prob
-        instances.attr_classes = max_attr_label
+        # roi_features = feature_pooled[ids].detach()
+        # max_attr_prob = max_attr_prob[ids].detach()
+        # max_attr_label = max_attr_label[ids].detach()
+        # instances.attr_scores = max_attr_prob
+        # instances.attr_classes = max_attr_label
 
         # print(instances)
 
-        return instances, roi_features
+        return instances
 
 
 def build_model():
@@ -230,3 +230,18 @@ def predict(img, detector):
 
     return features, boxes
 
+def extract_custom(img, detector): # img = cv2.imread(image_path)
+    with torch.no_grad():
+        instances = doit(img, detector)
+
+        # instances = instances.to('cpu')
+        grp = {}
+        grp['class'] = np.array(vg_classes,dtype='object')[np.array(instances.pred_classes.tolist())]
+        # grp['obj_id'] = instances.pred_classes
+        grp['obj_conf'] = instances.scores
+        # grp['attr_id'] = instances.attr_classes.numpy()
+        # grp['attr_conf'] = instances.attr_scores.numpy()
+        grp['boxes'] = instances.pred_boxes.tensor
+        grp['img_w'] = img.shape[1]
+        grp['img_h'] = img.shape[0]
+    return grp

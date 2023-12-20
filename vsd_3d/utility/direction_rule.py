@@ -1,56 +1,83 @@
 # '0' 处代表输出
 # 正方向为 front up   right
 # 负方向为 back  down left
+extral_id_0 = '<extra_id_0>'
+extral_id_1  = '<extra_id_1>'
+extral_id_2  = '<extra_id_2>'
+extral_id_3  = '<extra_id_3>'
+extral_id_4  = '<extra_id_4>'
+extral_id_5  = '<extra_id_5>'
+extral_id_6  = '<extra_id_6>'
+extral_id_7  = '<extra_id_7>'
+extral_id_8  = '<extra_id_8>'
+extral_id_9  = '<extra_id_9>'
+extral_id_10 = '<extra_id_10>'
+extral_id_11 = '<extra_id_11>'
+extral_id_12 = '<extra_id_12>'
+extral_id_13 = '<extra_id_13>'
+extral_id_14 = '<extra_id_14>'
+extral_id_15 = '<extra_id_15>'
+extral_id_16 = '<extra_id_16>'
+extral_id_17 = '<extra_id_17>'
+extral_id_18 = '<extra_id_18>'
+extral_id_19 = '<extra_id_19>'
+extral_id_20 = '<extra_id_20>'
+extral_id_21 = '<extra_id_21>'
+extral_id_22 = '<extra_id_22>'
+extral_id_23 = '<extra_id_23>'
+extral_id_24 = '<extra_id_24>'
+extral_id_25 = '<extra_id_25>'
+extral_id_26 = '<extra_id_26>'
 direction_dict = {
-    '0':'next to',
+    '0':extral_id_22, # next
     '1':{
         '0':{
             '0':{
-                '0':'front',
+                '0':extral_id_12, # front
                 '1':{
                     '0':{
                         '0':{
-                            '0':'front up right',
-                            '1':'front up left'
+                            '0':extral_id_20, #front up right
+                            '1':extral_id_19  #'front up left'
                         },
                         '1':{
-                            '0':'front down right',
-                            '1':'front down left'
+                            '0':extral_id_15, # 'front down right'
+                            '1':extral_id_14  # 'front down left'
                         }
                     },# 3重类
                     '1':{
                         '0':{
-                            '0':'front up',
-                            '1':'front down'
+                            '0':extral_id_18, # 'front up'
+                            '1':extral_id_13  # 'front down'
                         },
                         '1':{
-                            '0':'front right',
-                            '1':'front left'
+                            '0':extral_id_17, # 'front right'
+                            '1':extral_id_19  # 'front left'
                         }
                     }# 2重类
                 } #多重方向
             },     #Front
             '1':{
-                '0':'back',
+                '0':extral_id_0, # 'back'
                 '1':{
                     '0':{
                         '0':{
-                            '0':'back up right',
-                            '1':'back up left'
+                            '0':extral_id_8, # 'back up right'
+                            '1':extral_id_7  # 'back up left'
                         },
                         '1':{
-                            '0':'back down right',
-                            '1':'back down left'
+                            '0':extral_id_3, # 'back down right'
+                            '1':extral_id_2  # 'back down left'
                         }
                     },# 3重类
                     '1':{
                         '0':{
-                            '0':'back up',
-                            '1':'back down'
+                            '0':extral_id_6, # 'back up'
+                            '1':extral_id_1  # 'back down'
                         },
                         '1':{
-                            '0':'back right',
-                            '1':'back left'
+                            '0':extral_id_5, # 'back right'
+                            '1':extral_id_4  # 'back left'
                         }
                     }# 2重类
                 } #多重方向
@@ -58,51 +85,51 @@ direction_dict = {
         }, # 代表x方向
         '1':{
             '0':{
-                '0':'up',
+                '0':extral_id_24, # 'up'
                 '1':{
                     '0':{
                         '0':{
-                            '0':'up front right',
-                            '1':'up front left'
+                            '0':extral_id_20, # 'up front right'
+                            '1':extral_id_19  # 'up front left'
                         },
                         '1':{
-                            '0':'up back right',
-                            '1':'up back left'
+                            '0':extral_id_8,  # 'up back right'
+                            '1':extral_id_7   # 'up back left'
                         }
                     },# 3重类
                     '1':{
                         '0':{
-                            '0':'up front',
-                            '1':'up down'
+                            '0':extral_id_18, # 'up front'
+                            '1':extral_id_6   # 'up back'
                         },
                         '1':{
-                            '0':'up right',
-                            '1':'up left'
+                            '0':extral_id_26, # 'up right',
+                            '1':extral_id_25  # 'up left'
                         }
                     }# 2重类
                 } #多重方向
             },     #UP
             '1':{
-                '0':'down',
+                '0':extral_id_9, # 'down'
                 '1':{
                     '0':{
                         '0':{
-                            '0':'down front right',
-                            '1':'down front left'
+                            '0':extral_id_15, # 'down front right'
+                            '1':extral_id_14  # 'down front left'
                         },
                         '1':{
-                            '0':'down back right',
-                            '1':'down back left'
+                            '0':extral_id_3,  # 'down back right',
+                            '1':extral_id_2   # 'down back left'
                         }
                     },# 3重类
                     '1':{
                         '0':{
-                            '0':'down front',
-                            '1':'down back'
+                            '0':extral_id_13, # 'down front'
+                            '1':extral_id_1   # 'down back'
                         },
                         '1':{
-                            '0':'down right',
-                            '1':'down left'
+                            '0':extral_id_11, # 'down right',
+                            '1':extral_id_10  # 'down left'
                         }
                     }# 2重类
                 } #多重方向
@@ -110,51 +137,51 @@ direction_dict = {
         }, # 代表y方向
         '2':{
             '0':{
-                '0':'right',
+                '0':extral_id_23, # 'right'
                 '1':{
                     '0':{
                         '0':{
-                            '0':'right front up',
-                            '1':'right front down'
+                            '0':extral_id_20, # 'right front up'
+                            '1':extral_id_15  # 'right front down'
                         },
                         '1':{
-                            '0':'right back up',
-                            '1':'right back down'
+                            '0':extral_id_8,  # 'right back up'
+                            '1':extral_id_3   # 'right back down'
                         }
                     },# 3重类
                     '1':{
                         '0':{
-                            '0':'right front',
-                            '1':'right back'
+                            '0':extral_id_17, # 'right front',
+                            '1':extral_id_5   # 'right back'
                         },
                         '1':{
-                            '0':'right up',
-                            '1':'right down'
+                            '0':extral_id_25, # 'right up',
+                            '1':extral_id_11  # 'right down'
                         }
                     }# 2重类
                 } #多重方向
             },     #Right
             '1':{
-                '0':'left',
+                '0':extral_id_21, # 'left'
                 '1':{
                     '0':{
                         '0':{
-                            '0':'left front up',
-                            '1':'left front down'
+                            '0':extral_id_19, # 'left front up'
+                            '1':extral_id_14  # 'left front down'
                         },
                         '1':{
-                            '0':'left back up',
-                            '1':'left back down'
+                            '0':extral_id_7,  # 'left back up'
+                            '1':extral_id_2   # 'left back down'
                         }
                     },# 3重类
                     '1':{
                         '0':{
-                            '0':'left front',
-                            '1':'left back'
+                            '0':extral_id_16, # 'left front',
+                            '1':extral_id_4   # 'left back'
                         },
                         '1':{
-                            '0':'left up',
-                            '1':'left down'
+                            '0':extral_id_25, # 'left up',
+                            '1':extral_id_10  # 'left down'
                         }
                     }# 2重类
                 } #多重方向

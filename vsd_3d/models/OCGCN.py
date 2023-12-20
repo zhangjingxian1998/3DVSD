@@ -21,14 +21,14 @@ class OcGCN(nn.Module):
         self.vison = FFN(in_feature = 768, 
                          middle_feature = 3072, 
                          out_feature = 768)
-        # self.edge_up = nn.Sequential(
-        #     nn.Linear(1,768),
-        #     nn.LayerNorm(768)
-        # )
         self.edge_up = nn.Sequential(
-            nn.Linear(3,768),
+            nn.Linear(1,768),
             nn.LayerNorm(768)
         )
+        # self.edge_up = nn.Sequential(
+        #     nn.Linear(3,768),
+        #     nn.LayerNorm(768)
+        # )
         self.edge = FFN(in_feature=768,middle_feature=3072,out_feature=768)
 
         self.Wb = nn.ModuleList()
@@ -119,21 +119,21 @@ class OcGCN(nn.Module):
         D = vision.shape[-1]
         adjacency_matrix_mask_float = adjacency_matrix.unsqueeze(-1).repeat(1,1,1,D) # [B, N, N] --> [B, N ,N ,1] --> [B, N, N, D]
 
-        # 计算两两夹角余弦值
-        # A·B = |A||B|cos(radian)
+        # # 计算两两夹角余弦值
+        # # A·B = |A||B|cos(radian)
         local_V = centroid.unsqueeze(2).repeat(1,1,N,1) # [B, N, 3] --> [B, N, 1, 3] --> [B, N, N, 3]
         local_H = centroid.unsqueeze(1).repeat(1,N,1,1) # [B, N, 3] --> [B, 1, N, 3] --> [B, N, N, 3]
-        # # 计算点积
-        # dot_product = torch.sum(local_V * local_H, dim=-1)
-        # # 计算向量模长
-        # norm_local_V = torch.norm(local_V,dim=-1)
-        # norm_local_H = torch.norm(local_H,dim=-1)
-        # # 计算夹角的余弦值
-        # # radian = arccos[(A·B)/(|A||B|)]
-        # s_e = dot_product / (norm_local_V * norm_local_H)
+        # 计算点积
+        dot_product = torch.sum(local_V * local_H, dim=-1)
+        # 计算向量模长
+        norm_local_V = torch.norm(local_V,dim=-1)
+        norm_local_H = torch.norm(local_H,dim=-1)
+        # 计算夹角的余弦值
+        # radian = arccos[(A·B)/(|A||B|)]
+        s_e = dot_product / (norm_local_V * norm_local_H)
 
-        s_e = local_V + local_H
-        s_e = s_e/(torch.norm(s_e.view(B,-1),dim=-1).view(B,1,1,1).repeat(1,N,N,3))
+        # s_e = local_V + local_H
+        # s_e = s_e/(torch.norm(s_e.view(B,-1),dim=-1).view(B,1,1,1).repeat(1,N,N,3))
         
         s_e = self.edge_up(s_e.view(B, N*N, -1))
         s_e = self.edge(s_e)                                # 每个batch展平送入网络处理 [B, N, N] --> [B, N*N, 1] --> [B, N*N, D]

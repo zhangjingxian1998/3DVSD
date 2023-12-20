@@ -26,11 +26,14 @@ class Model(nn.Module):
         self.vg_root = '/home/Datasets/VG/VG_100K/'
         self.f_root = '/home/Datasets/SpatialScene/images/flickr/'
         self.n_root = '/home/Datasets/SpatialScene/images/nyu/'
+        self.rel = []
+        self.count = 0
         pass
 
     def forward(self, args, data):
         self.device = next(self.parameters()).device
         self.args = args
+        img_id = data['batch_entry']['img_id']
         if args.VL_pretrain:
             data = data['batch_entry_3d']
             data['centroid'] = data['centroid'].to(self.device)
@@ -61,7 +64,6 @@ class Model(nn.Module):
             return text_prompt
         else:
             vis_feats = data['vis_feats'].to(self.device)
-            img_id = data['batch_entry']['img_id']
             sentence = data['batch_entry']['sentences']
             data = data['batch_entry_3d']
             data['centroid'] = data['centroid'].to(self.device)
@@ -100,7 +102,7 @@ class Model(nn.Module):
             direction_list_extral = None
             if extral_flag_3_center.shape[0]:
                 direction_list_extral = self.calculate_direction(extral_flag_3_center)
-            # self.visualize(img_id,direction_list,direction_list_extral,data['boxes_center_3d_show'],subgraph,flag, class_name)
+            
             # TODO 接下来根据flag的不同, 生成不同的提示语句
             time_5 = time.time()
             # 返回子图中间节点类别
@@ -114,6 +116,13 @@ class Model(nn.Module):
             # print('得出r_G耗时:',time_4 - time_3)
             # print('得出方位耗时:',time_5 - time_4)
             # print('计算损失值耗时:',time_6 - time_5)
+            if args.visualize:
+                self.visualize(img_id,direction_list,direction_list_extral,data['boxes_center_3d_show'],subgraph,flag, class_name)
+            if args.get_rel:
+                self.rel = np.array(self.rel,dtype='object')
+                np.save(f'rel_save/s3/{self.count}.npy',self.rel)
+                self.rel = []
+                self.count += 1
             pass
         return r_G, text_prompt, loss
 
@@ -372,7 +381,8 @@ class Model(nn.Module):
             rel_1 = direction_list[batch_id][0]
             rel_2 = direction_list[batch_id][1]
             if flag_one == 0:
-                text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {sub} <REL> {direction_list[batch_id][0]} <OBJ> {obj}'
+                text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {sub} <REL> {rel_1} <OBJ> {obj}'
+                rel_2 = rel_1
             elif flag_one == 1:
                 text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {middle_sub} <REL> {rel_1} <OBJ> {sub} <OBJ> {sub} <REL> {rel_2} <OBJ> {obj}'
             elif flag_one == 2:
@@ -381,19 +391,31 @@ class Model(nn.Module):
                 rel_3 = direction_list_extral[a][0]
                 text = f'<TGT> {sub} <TGT> {obj} <SEP> <OBJ> {middle_sub} <REL> {rel_1} <OBJ> {sub} <OBJ> {sub} <REL> {rel_2} <OBJ> {obj} <OBJ> {obj} <REL> {rel_3} <OBJ> {middle_obj}'
                 a = a + 1
+            self.rel.append(rel_2)
             text_prompt.append(text)
         return text_prompt
     def visualize(self,img_id_batch,direction_list,direction_list_extral,boxes_center_3d,subgraph,flag, class_name):
         extral_id = 0
         font = cv2.FONT_HERSHEY_DUPLEX
-        scale = 0.5
+        
         line_type = cv2.LINE_AA
         for idx, img_id in enumerate(img_id_batch):
-            img_path = self.vg_root+img_id+'.jpg'
-            if not os.path.exists(img_path):
-                img_path = self.f_root+img_id+'.jpg'
-            if not os.path.exists(img_path):
-                img_path = self.n_root+img_id+'.png'
+            if 'custom' in self.args.save_result_path:
+                img_path = './custom/'+img_id+'.jpg'
+                if not os.path.exists(img_path):
+                    img_path = './custom/'+img_id+'.png'
+                if not os.path.exists(img_path):
+                    img_path = './custom/'+img_id+'.jpeg'
+                scale = 1
+                text_scale = 2
+            else:
+                scale = 0.5
+                text_scale = 1
+                img_path = self.vg_root+img_id+'.jpg'
+                if not os.path.exists(img_path):
+                    img_path = self.f_root+img_id+'.jpg'
+                if not os.path.exists(img_path):
+                    img_path = self.n_root+img_id+'.png'
             img = cv2.imread(img_path)
             flag_one = flag[idx]
             subgraph_one = subgraph[idx]
@@ -409,20 +431,20 @@ class Model(nn.Module):
             cv2.putText(img,class_name_one[1],center_obj.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
             
             if flag_one == 0:
-                cv2.putText(img,class_name_one[0] + ' ' + direction_list_one[0] + ' ' + class_name_one[1],(0,10),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
+                cv2.putText(img,class_name_one[0] + ' ' + direction_list_one[0] + ' ' + class_name_one[1],(0,10*text_scale),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
             elif flag_one == 1:
                 center_middle = boxes_center_one[subgraph_one[0]]
                 cv2.circle(img,center_middle.int().cpu().numpy(),5,(0,255,0),thickness=-1)
                 cv2.putText(img,class_name_one[subgraph_one[0]],center_middle.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
-                cv2.putText(img,class_name_one[subgraph_one[0]] + ' ' + direction_list_one[0] + ' ' + class_name_one[0],(0,15),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
-                cv2.putText(img,class_name_one[0] + ' ' + direction_list_one[1] + ' ' + class_name_one[1],(0,30),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[subgraph_one[0]] + ' ' + direction_list_one[0] + ' ' + class_name_one[0],(0,15*text_scale),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[0] + ' ' + direction_list_one[1] + ' ' + class_name_one[1],(0,30*text_scale),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
                 pass
             elif flag_one == 2:
                 center_middle = boxes_center_one[subgraph_one[1]]
                 cv2.circle(img,center_middle.int().cpu().numpy(),5,(0,255,0),thickness=-1)
                 cv2.putText(img,class_name_one[subgraph_one[1]],center_middle.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
-                cv2.putText(img,class_name_one[subgraph_one[1]] + ' ' + direction_list_one[0] + ' ' + class_name_one[1],(0,15),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
-                cv2.putText(img,class_name_one[1] + ' ' + direction_list_one[1] + ' ' + class_name_one[0],(0,30),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[subgraph_one[1]] + ' ' + direction_list_one[0] + ' ' + class_name_one[1],(0,15*text_scale),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[1] + ' ' + direction_list_one[1] + ' ' + class_name_one[0],(0,30*text_scale),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
                 pass
             elif flag_one == 3:
                 center_middle1 = boxes_center_one[subgraph_one[0]]
@@ -432,22 +454,15 @@ class Model(nn.Module):
                 cv2.circle(img,center_middle2.int().cpu().numpy(),5,(0,255,0),thickness=-1)
                 cv2.putText(img,class_name_one[subgraph_one[1]],center_middle2.int().cpu().numpy(),fontFace=font,fontScale=scale,color=(0,255,0),lineType=line_type)
 
-                cv2.putText(img,class_name_one[subgraph_one[0]] + ' ' + direction_list_one[0] + ' ' + class_name_one[0],(0,15),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
-                cv2.putText(img,class_name_one[0] + ' ' + direction_list_one[1] + ' ' + class_name_one[1],(0,30),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
-                cv2.putText(img,class_name_one[1] + ' ' + direction_list_extral[extral_id][0] + ' ' + class_name_one[subgraph_one[1]],(0,45),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[subgraph_one[0]] + ' ' + direction_list_one[0] + ' ' + class_name_one[0],(0,15*text_scale),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[0] + ' ' + direction_list_one[1] + ' ' + class_name_one[1],(0,30*text_scale),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
+                cv2.putText(img,class_name_one[1] + ' ' + direction_list_extral[extral_id][0] + ' ' + class_name_one[subgraph_one[1]],(0,45*text_scale),fontFace=font,fontScale=scale,color=(0,0,255),lineType=line_type)
                 extral_id = extral_id + 1
                 pass
-            cv2.imwrite(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd1/{img_id}.png',img)
+            if not os.path.exists(self.args.save_result_path):
+                os.mkdir(self.args.save_result_path)
+            cv2.imwrite(f'{self.args.save_result_path}/{img_id}.png',img)
         pass
-    # def norm(self,data):
-    #     center = data['centroid']
-    #     B,N,D = center.shape
-    #     min_batch = torch.min(center,dim=-2,keepdim=True)[0]
-    #     min_batch = torch.min(min_batch, torch.tensor(0.))
-    #     min_batch = min_batch.repeat(1,N,1)
-    #     center = center + torch.abs(min_batch)
-    #     center = center / torch.norm(center.view(B,-1),dim=-1).view(B,1,1).repeat(1,N,D)
-    #     return center
     def norm_two(self,center_0, center_1):
         center = torch.cat([center_0,center_1],dim=0)
         min_batch = torch.min(center)

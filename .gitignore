@@ -15,3 +15,7 @@ log
 *.png
 .gitignore
 *.txt
+*.npy
+*.jpg
+*.jpeg
+*.json
