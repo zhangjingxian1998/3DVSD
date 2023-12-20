@@ -1,6 +1,6 @@
 # py-bottom-up-attention
 # language-evaluation
-Total3DUnderstanding
+# Total3DUnderstanding
 data/*
 *.log
 test.ipynb
@@ -19,3 +19,5 @@ log
 *.jpg
 *.jpeg
 *.json
+Total3DUnderstanding/data_detection
+Total3DUnderstanding/demo
