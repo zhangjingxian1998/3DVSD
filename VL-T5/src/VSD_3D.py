@@ -177,17 +177,7 @@ class Trainer(TrainerBase):
                     pass
                 else:
                     batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
-                # print(batch['batch_entry']['inpu'])
                 # time_1 = time.time()
-
-                # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
-                # batch['batch_entry']['input_ids'] = self.text_process(batch,split_word, split_id, text_prompt)
-                # 输出的vsd_3d_result应该包括： 
-                # r_G: 用作后续VL模型中的decoder做cross_attention
-                # 子图的额外类类名，用作填进提示词中 # 如果没有额外的类应该怎么办
-                # 预测出来的关系，用于填进提示词中
-                # 到此，提示词填充完毕，应将提示词tolist(), 用' '拼接，转为相应的input_ids
-                # 还有边得分的损失
                 if self.args.fp16 and _use_native_amp:
                     with autocast():
                         if self.args.distributed:

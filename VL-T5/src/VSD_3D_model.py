@@ -54,30 +54,23 @@ class VLT53DVSD(VLT5):
             loss = self.bce_loss(logit, target)
 
         else:
-            reduce_loss = True
             lm_labels = batch["target_ids"].to(device)
             output = self(
                 input_ids=input_ids,
                 vis_inputs=(vis_feats, vis_pos),
                 labels=lm_labels,
                 return_dict=True,
-                reduce_loss=reduce_loss,
                 **kwargs
             )
             assert 'loss' in output
 
-            # lm_mask = (lm_labels != -100).float()
-            # B, L = lm_labels.size()
+            lm_mask = (lm_labels != -100).float()
+            B, L = lm_labels.size()
 
             loss = output['loss']
-
-            # loss = loss.view(B, L) * lm_mask
-
-            # loss = loss.sum(dim=1) / lm_mask.sum(dim=1).clamp(min=1)  # B
-
-            # # loss = loss * batch['scores'].to(device=device)
-
-            # loss = loss.mean()
+            loss = loss.view(B, L) * lm_mask
+            loss = loss.sum(dim=1) / lm_mask.sum(dim=1).clamp(min=1)  # B
+            loss = loss.mean()
 
         result = {
             'loss': loss
@@ -98,7 +91,6 @@ class VLT53DVSD(VLT5):
         input_ids = batch['input_ids'].to(device)
         vis_pos = batch['boxes'].to(device)
         num_beams = kwargs['num_beams']
-        max_length = kwargs['max_length']
 
         result = {}
         if self.config.classifier:

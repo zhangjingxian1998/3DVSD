@@ -160,18 +160,17 @@ class Trainer(TrainerBase):
                 r_G, text_prompt, _ = self.vsd_3d_encoder(self.args, batch)
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 results = self.model.test_step(batch, r_G,**gen_kwargs)
-                pred_ans = results['pred_ans'][0]
+                pred_ans = results['pred_ans']
                 if self.args.visualize:
                     name = batch['batch_entry']['img_id']
                     true = batch['batch_entry']['sentences']
                     if not os.path.exists(self.args.save_result_path):
                         os.mkdir(self.args.save_result_path)
                     with open(f'{self.args.save_result_path}/{name}.txt', 'w') as t:
-                        t.write('The model output: ')
-                        t.write(pred_ans)
-                        t.write('\n')
-                        t.write('The true is: ')
-                        t.write(true)
+                        t.write('The model output: \n')
+                        for ans in pred_ans:
+                            t.write(ans)
+                            t.write('\n')
                         t.close()
                 answer.append(pred_ans)
                 pbar.update(1)

@@ -171,14 +171,6 @@ class Trainer(TrainerBase):
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 time_1 = time.time()
 
-                # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
-                # batch['batch_entry']['input_ids'] = self.text_process(batch,split_word, split_id, text_prompt)
-                # 输出的vsd_3d_result应该包括： 
-                # r_G: 用作后续VL模型中的decoder做cross_attention
-                # 子图的额外类类名，用作填进提示词中 # 如果没有额外的类应该怎么办
-                # 预测出来的关系，用于填进提示词中
-                # 到此，提示词填充完毕，应将提示词tolist(), 用' '拼接，转为相应的input_ids
-                # 还有边得分的损失
                 if self.args.fp16 and _use_native_amp:
                     with autocast():
                         if self.args.distributed:
@@ -366,8 +358,8 @@ class Trainer(TrainerBase):
             if self.verbose:
                 pbar = tqdm(total=len(loader), ncols=120, desc="Prediction")
             for i, batch in enumerate(loader):
-                if i != 9:
-                    continue
+                # if i != 9:
+                #     continue
                 r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
@@ -406,18 +398,6 @@ class Trainer(TrainerBase):
         if self.args.distributed:
             dist.barrier()
 
-        # qid2ans_list = dist_utils.all_gather(quesid2ans)
-        # if self.verbose:
-        #     quesid2ans = {}
-        #     for qid2ans in qid2ans_list:
-        #         for k, v in qid2ans.items():
-        #             quesid2ans[k] = v
-
-        #     if dump_path is not None:
-        #         evaluator = loader.evaluator
-        #         evaluator.dump_result(quesid2ans, dump_path)
-
-        # return quesid2ans
         return target, answer
 
     def evaluate(self, loader, dump_path=None):
@@ -450,46 +430,6 @@ class Trainer(TrainerBase):
             input_ids_tensor[i,:length[i]] = input_ids[i]
         return input_ids_tensor
 
-    # def text_process_(self, batch,split_word, split_id, ):
-    #     B = batch['vis_feats'].shape[0]
-    #     arange = np.arange(B)
-    #     input_text = batch['batch_entry']['input_text']
-
-    #     replace_middle = np.array(self.train_loader.dataset.prompt_template_replace_middle_id)
-    #     replace_rel = np.array(self.train_loader.dataset.prompt_template_replace_rel_id)
-    #     replace_middle = np.repeat(replace_middle.reshape(1,-1), B, axis=0)
-    #     replace_rel = np.repeat(replace_rel.reshape(1,-1), B, axis=0)
-
-    #     input_text[arange,replace_middle[:,0]]=subgraph_class
-    #     input_text[arange,replace_middle[:,1]]=subgraph_class
-
-    #     input_text[arange,replace_rel[:,0]] = direction_list[:,0]
-    #     input_text[arange,replace_rel[:,1]] = direction_list[:,1]
-    #     extra_id_split = np.repeat(np.array([[split_word]]).astype(np.object_),B,axis=0)
-    #     input_text = np.concatenate([input_text, extra_id_split], axis=-1)
-    #     input_text = input_text.reshape(-1).tolist()
-    #     input_text = ' '.join(input_text)
-    #     input_id = self.tokenizer.encode(input_text, return_tensors='pt', add_special_tokens = False)
-    #     index = torch.where(input_id==split_id)[1]
-    #     input_ids = []
-    #     input_id = input_id.view(-1)
-    #     for i in range(B-1):
-    #         if i == 0:
-    #             input_ids.append(input_id[:index[i]])
-    #         else:
-    #             input_ids.append(input_id[index[i-1]+1:index[i]])
-    #     input_ids.append(input_id[index[-2]+1:-1])
-    #     # TODO 需要给其按照最大长度补0
-    #     S_W_L = 0
-    #     length = []
-    #     for input_id in input_ids:
-    #         if input_id.shape[0] > S_W_L:
-    #             S_W_L = input_id.shape[0]
-    #         length.append(input_id.shape[0])
-    #     input_ids_tensor = torch.ones(B, S_W_L, dtype=torch.long) * self.tokenizer.pad_token_id
-    #     for i in range(B):
-    #         input_ids_tensor[i,:length[i]] = input_ids[i]
-    #     return input_ids_tensor
     def test(self):
         device = next(self.model.parameters()).device
         self.vsd_3d_encoder = self.vsd_3d_encoder.to(device)
@@ -631,29 +571,4 @@ if __name__ == "__main__":
     # args.vsd_pretrain = True
     ##############################################
 
-
-    # if args.local_rank in [0, -1]:
-    #     print(args)
-
-    #     comments = []
-    #     if args.load is not None:
-    #         ckpt_str = "_".join(args.load.split('/')[-3:])
-    #         comments.append(ckpt_str)
-    #     elif args.load_lxmert_qa is not None:
-    #         ckpt_str = "_".join(args.load_lxmert_qa.split('/')[-3:])
-    #         comments.append(ckpt_str)
-    #     if args.comment != '':
-    #         comments.append(args.comment)
-    #     comment = '_'.join(comments)
-
-    #     from datetime import datetime
-    #     current_time = datetime.now().strftime('%b%d_%H-%M')
-
-    #     run_name = f'{current_time}_GPU{args.world_size}'
-    #     if len(comments) > 0:
-    #         run_name += f'_{comment}'
-
-    #     args.run_name = run_name
-
-    # if args.distributed:
     main_worker(args.local_rank, args, total3d_model, vsd_3d_encoder)

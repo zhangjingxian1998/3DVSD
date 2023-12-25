@@ -1,5 +1,5 @@
 import torch
-from vsd_3d.models import OcGCN, SUBGRAPH, MeanPool
+from vsd_3d.models import OcGCN, SUBGRAPH
 import torch.nn as nn
 from vsd_3d.utility.direction_rule import direction_dict
 import time
@@ -35,12 +35,13 @@ class Model(nn.Module):
         self.args = args
         img_id = data['batch_entry']['img_id']
         if args.VL_pretrain:
+            # 模型预训练
             data = data['batch_entry_3d']
             data['centroid'] = data['centroid'].to(self.device)
             data['boxes_center_3d'] = data['boxes_center_3d'].to(self.device)
             data['mask_ture_class'] = data['mask_ture_class'].to(self.device) # 把这个mask_true_class 做成一个邻接矩阵, 只有两个对应类全都是total3d中能够检测的类, 才取他们对应的centroid, 否则, 取他们的boxes_center_3d
             class_name = data['class_name']
-            # 重新定义对3d坐标点进行取值 写for循环得了
+            # 重新定义对3d坐标点进行取值
             new_data_center = torch.zeros(data['centroid'].shape[0],2,3).to(self.device)
             for batch_id, mask_true in enumerate(torch.sum(data['mask_ture_class'], dim=-1)):
                 if mask_true == 2:
@@ -63,6 +64,7 @@ class Model(nn.Module):
                 text_prompt.append(text)
             return text_prompt
         else:
+            # 模型global training
             vis_feats = data['vis_feats'].to(self.device)
             sentence = data['batch_entry']['sentences']
             data = data['batch_entry_3d']
