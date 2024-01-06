@@ -1,5 +1,5 @@
 # The name of experiment 通过预训练, 使模型对于 <OBJ> 和 <REL> 进行学习
-name=VLT5_replace_gt_extra_id
+name=VLT5
 
 output=VL-T5/snap/VSD_3D/final/vsd2/$name
 
@@ -23,13 +23,10 @@ python -m torch.distributed.launch \
         --n_ground 4 \
         --backbone 'VL-T5/t5-base' \
         --output $output ${@:2} \
-        --load 'VL-T5/snap/pretrain/VLT5/Epoch30' \
+        --load 'VL-T5/snap/VSD_3D/pretrain/VLT5/BEST' \
         --num_beams 5 \
         --valid_batch_size 100 \
         --save_result_path 'save_img_vsd2' \
-        --use_prefix \
-        # --VL_pretrain \
-        # --load 'VL-T5/snap/VSD_3D/pretrain/VLT5/BEST' \
+        --test_only \
         # --get_rel \
-        # --test_only \
         # --replace_rel

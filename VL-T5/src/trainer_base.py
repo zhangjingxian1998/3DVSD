@@ -192,7 +192,8 @@ class TrainerBase(object):
         return optim, lr_scheduler
 
     def load_checkpoint(self, ckpt_path):
-        if self.args.VL_pretrain:
+        if self.args.VL_pretrain and not self.args.VL_pretrain_load_weight:
+        # if False:
             if 't5' in self.args.backbone:
                 origin_different_keys = [
                     'shared.weight',

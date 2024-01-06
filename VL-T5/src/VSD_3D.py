@@ -26,6 +26,7 @@ from Total3DUnderstanding.utils.param import parse_args as total3d_parse_args
 from Total3DUnderstanding.configs.config_utils import CONFIG
 from vsd_3d.models import Model
 import time
+from pprint import pformat
 from torch.utils.tensorboard import SummaryWriter
 logger = SummaryWriter(log_dir='./log')
 step_count = 0
@@ -171,7 +172,9 @@ class Trainer(TrainerBase):
             # split_id = self.tokenizer.encode(split_word, return_tensors="pt", add_special_tokens=False)
             for step_i, batch in enumerate(self.train_loader):
                 # time_0 = time.time()
-                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
+                # r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
+                score_loss=torch.tensor(0)
+                r_G=None
                 #####################################################################################
                 if args.use_prefix:
                     pass
@@ -192,8 +195,8 @@ class Trainer(TrainerBase):
                         results = self.model.train_step(batch, r_G)
                         # time_2 = time.time()
                         
-
-                loss = 0.1 * results['loss'] + 0.9 * score_loss
+                loss = results['loss']
+                # loss = 0.1 * results['loss'] + 0.9 * score_loss
                 # loss = 0.1 * results['loss']
 
                 if self.args.fp16 and _use_native_amp:
@@ -281,6 +284,7 @@ class Trainer(TrainerBase):
             
 
             if self.verbose:
+                
                 valid_score = score_dict['CIDEr'] * 100.
                 if valid_score > best_valid or epoch == 0:
                     best_valid = valid_score
@@ -288,6 +292,7 @@ class Trainer(TrainerBase):
                     self.save("BEST")
 
                 log_str = ''
+                log_str += pformat(score_dict)
                 log_str += "\nEpoch %d: Valid Raw %0.2f" % (epoch, valid_score)
                 log_str += "\nEpoch %d: Best Raw %0.2f\n" % (best_epoch, best_valid)
             
@@ -322,9 +327,10 @@ class Trainer(TrainerBase):
         if self.verbose:
             evaluator = self.test_loader.evaluator
             score_dict = evaluator.evaluate(target, answer)
-
-            test_score = score_dict['CIDEr'] * 100.
             log_str = ''
+            log_str += pformat(score_dict)
+            test_score = score_dict['CIDEr'] * 100.
+            
             log_str += "\nTest %0.2f" % (test_score)
             print(log_str)
             # evaluator.dump_result(quesid2ans)
@@ -463,9 +469,9 @@ class Trainer(TrainerBase):
             acc_dict = {}
             topk_score = evaluator.evaluate(target, answer)
             # topk_score = evaluator.evaluate(quesid2ans)
-            acc_dict['CIDEr'] = topk_score['CIDEr']
+            # acc_dict['CIDEr'] = topk_score['CIDEr']
 
-            return acc_dict
+            return topk_score
     
     def text_process(self, batch, text_prompt):
         B = batch['vis_feats'].shape[0]
@@ -615,7 +621,7 @@ if __name__ == "__main__":
     args.world_size = ngpus_per_node
 
     args.predict_custom = False # 如果是开放世界测试，需要引入total3d和fastercnn
-    args.VL_pretrain = False # 控制对视觉语言模型进行预训练
+    # args.VL_pretrain = False # 控制对视觉语言模型进行预训练
     if args.predict_custom:
         # build faster rcnn
 

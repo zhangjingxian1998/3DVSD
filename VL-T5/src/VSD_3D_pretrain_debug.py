@@ -566,8 +566,8 @@ if __name__ == "__main__":
     args.output = 'VL-T5/snap/baseline/VSD_3D'
     args.backbone = 'VL-T5/t5-base'
     # args.backbone = 'VL-T5/bart-base'
-    # args.load = 'VL-T5/snap/pretrain/VLT5/Epoch30'
-    args.load = 'VL-T5/snap/VSD_3D/pretrain/VLT5/BEST'
+    args.load = 'VL-T5/snap/pretrain/VLT5/Epoch30'
+    # args.load = 'VL-T5/snap/VSD_3D/pretrain/VLT5/BEST'
     # args.load = None
     args.num_beams = 5
     args.batch_size = 32

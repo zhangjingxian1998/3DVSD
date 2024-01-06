@@ -17,6 +17,7 @@ from torch.utils.data.distributed import DistributedSampler
 from transformers import T5TokenizerFast, BartTokenizer
 from tokenization import VLT5TokenizerFast
 import copy
+import re
 
 project_dir = Path(__file__).resolve().parent.parent  # VLT5
 workspace_dir = project_dir.parent
@@ -27,7 +28,8 @@ vg_feature_dir = vg_dir.joinpath('features')
 vrd_img_dir = vrd_dir.joinpath('images/')
 vrd_feature_dir = vrd_dir.joinpath('features')
 
-predicate = ["on", "to the left of", "under", "behind", "to the right of", "in", "next to", "in front of", "above"]
+# predicate = ["on", "to the left of", "under", "behind", "to the right of", "in", "next to", "in front of", "above"]
+predicate = ["to the left of", "to the right of", "in front of", "next to", "behind", "under", "above", "on", "in"]
 predicate_dict = {
     'on':'<extra_id_27>',
     "to the left of":'<extra_id_28>',
@@ -192,6 +194,7 @@ class VSD_3D_FineTuneDataset(Dataset):
         # 对VL模型预训练时, 能给到的视觉提示是前两个, 即sub和obj
         f = self.source_to_h5
         if self.args.VL_pretrain:
+        # if False:
             out_dict = {}
             out_dict_3dvsd = {}
             out_dict['args'] = self.args
@@ -386,6 +389,12 @@ class VSD_3D_FineTuneDataset(Dataset):
             
             # if datum['is_train']:
             sent = datum['sent'].strip()
+            if self.args.rep_extra_id:
+                sent = sent.lower()
+                for p in predicate:
+                    sent = re.sub(fr'\b{p}\b',predicate_dict[p],sent)
+                    # sent = sent.replace(p, predicate_dict[p])
+                sent = sent.capitalize()
             if 't5' in self.args.tokenizer:
                 target_ids = self.tokenizer.encode(sent, max_length=self.args.gen_max_length, truncation=True)
             elif 'bart' in self.args.tokenizer:
@@ -411,6 +420,7 @@ class VSD_3D_FineTuneDataset(Dataset):
         sentences = []
         sub_rel_obj = []
         if self.args.VL_pretrain:
+        # if False:
             if self.args.use_vision:
                 V_L = max(entry['out_dict']['n_boxes'] for entry in batch)
                 feat_dim = batch[0]['out_dict']['vis_feats'].shape[-1]
@@ -655,7 +665,7 @@ def get_loader(args, split='train', mode='train',
 class COCOCaptionEvaluator:
     def __init__(self):
         import language_evaluation
-        self.evaluator = language_evaluation.CocoEvaluator(coco_types=["BLEU", "ROUGE_L", "CIDEr"],verbose=False)
+        self.evaluator = language_evaluation.CocoEvaluator(verbose=False)
 
 
     def evaluate(self, predicts, answers):

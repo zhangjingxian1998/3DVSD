@@ -166,6 +166,7 @@ def parse_args(parse=True, **optional_kwargs):
     # Extral
     parser.add_argument("--vsd_pretrain", action='store_true')
     parser.add_argument("--vl_pretrain", action='store_true')
+    parser.add_argument("--VL_pretrain", action='store_true')
     parser.add_argument("--data", type=str)
     parser.add_argument("--replace_rel", action='store_true')
     parser.add_argument("--get_rel", action='store_true')
@@ -173,7 +174,8 @@ def parse_args(parse=True, **optional_kwargs):
     parser.add_argument("--visualize", action='store_true')
     parser.add_argument("--s3_search", action='store_true')
     parser.add_argument("--save_result_path", type=str, default='result_save')
-
+    parser.add_argument("--rep_extra_id", action='store_true')
+    parser.add_argument("--VL_pretrain_load_weight", action='store_true')
     # Parse the arguments.
     if parse:
         args = parser.parse_args()

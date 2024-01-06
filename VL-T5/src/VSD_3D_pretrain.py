@@ -137,7 +137,7 @@ class Trainer(TrainerBase):
 
 
     def train(self):
-        r_G = None
+        r_G = None # r_G在预训练过程无用，设置为None
         device = next(self.model.parameters()).device
         self.vsd_3d_encoder = self.vsd_3d_encoder.to(device)
         if self.verbose:
@@ -166,8 +166,10 @@ class Trainer(TrainerBase):
             time_start = time.time()
             
             for step_i, batch in enumerate(self.train_loader):
+                # break
                 time_0 = time.time()
                 text_prompt = self.vsd_3d_encoder(self.args, batch)
+                # text_promt作为视觉语言模型的输入
                 time_1 = time.time()
                 # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
@@ -188,8 +190,8 @@ class Trainer(TrainerBase):
                         results = self.model.module.train_step(batch, r_G)
                         time_2 = time.time()
                     else:
-                            results = self.model.train_step(batch, r_G)
-                            time_2 = time.time()
+                        results = self.model.train_step(batch, r_G)
+                        time_2 = time.time()
                         
 
                 loss = results['loss']
@@ -267,7 +269,7 @@ class Trainer(TrainerBase):
 
             # Validation
             score_dict = self.evaluate(self.val_loader)
-
+            # score_dict = self.evaluate(self.train_loader)
             if self.verbose:
                 valid_score = score_dict['CIDEr'] * 100.
                 if valid_score > best_valid or epoch == 0:
@@ -361,9 +363,9 @@ class Trainer(TrainerBase):
                 text_prompt = self.vsd_3d_encoder(self.args, batch)
                 batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
-                    results = self.model.module.test_step(batch, r_G)
+                    results = self.model.module.test_step(batch, r_G,**gen_kwargs)
                 else:
-                    results = self.model.test_step(batch, r_G)
+                    results = self.model.test_step(batch, r_G,**gen_kwargs)
 
                 pred_ans = results['pred_ans']
                 # ques_ids = batch['question_ids']

@@ -29,7 +29,7 @@ class OcGCN(nn.Module):
         for _ in range(layer_num):
             self.Wb.append(
                         nn.Sequential(
-                            nn.Linear(768,768),
+                            nn.Linear(768*2,768),
                             nn.LayerNorm(768)
                                     )
                             )
@@ -52,7 +52,7 @@ class OcGCN(nn.Module):
         for _ in range(layer_num):
             self.layernorm_list.append(nn.LayerNorm(768))
             self.wb_layernorm_list.append(nn.LayerNorm(768))
-            self.vision_layernorm_list.append(nn.LayerNorm(768))        
+            self.vision_layernorm_list.append(nn.LayerNorm(768))
 
     def forward(self,x, vis_feats, adjacency_matrix):
         vision, s_e = self.preprocess(x, vis_feats, adjacency_matrix) # vision [B, N, 768] s_e [B, N, N, 768]
@@ -68,16 +68,23 @@ class OcGCN(nn.Module):
         # vision_res = vision
         for idx_layer in range(len(self.Wa)): # 公式2
             sj_v_ = vision.unsqueeze(1).repeat(1,N,1,1)     # [B, N, D] --> [B, 1, N, D] --> [B, N, N, D]
-            a = self.wb_layernorm_list[idx_layer](sj_v_+st_v)
-            a = a.view(B, N*N, D)                           # 每个batch展平，送入网络处理 [B, N, N, D] --> [B, N*N, D]
+            # a = self.wb_layernorm_list[idx_layer](sj_v_+st_v)
+            a = torch.cat([sj_v_, st_v], dim=-1)
+            a = a.view(B, N*N, D*2)                           # 每个batch展平，送入网络处理 [B, N, N, D] --> [B, N*N, D]
             a = self.Wb[idx_layer](a).view(B, N, N, D)      # 网络处理完后，形状恢复  [B, N*N, D] --> [B, N, N, D]
             a = torch.exp(a)
 
             b = a * adjacency_matrix_mask_float             # 只对存在关系的连边保持梯度
             b = torch.sum(b, dim=2, keepdim=True)           # [B, N, N, D] --> [B, N, 1, D]
             b = b.repeat(1,1,N,1) + little_item             # [B, N, 1, D] --> [B, N, N, D]
+            b = torch.sqrt(b)
 
-            gama = (a / b) * adjacency_matrix_mask_float    # 只保留存在关系连边的权重，其余置0
+            c = a * adjacency_matrix_mask_float
+            c = torch.sum(c, dim=1, keepdim=True)
+            c = c.repeat(1,N,1,1) + little_item
+            c = torch.sqrt(c)
+
+            gama = (a / (b*c)) * adjacency_matrix_mask_float    # 只保留存在关系连边的权重，其余置0
 
             si_v = vision.unsqueeze(2).repeat(1,1,N,1)                  # [B, N, D] --> [B, N, 1, D] --> [B, N, N, D]
             vision_cat = torch.cat([si_v, s_e, st_v],dim=-1)            # [B, N, N, 3*D]

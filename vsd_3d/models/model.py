@@ -1,5 +1,6 @@
 import torch
 from vsd_3d.models import OcGCN, SUBGRAPH
+from vsd_3d.models.OCGCN_ngcn import OcGCN as OCGCN_ngcn
 import torch.nn as nn
 from vsd_3d.utility.direction_rule import direction_dict
 import time
@@ -18,6 +19,7 @@ class Model(nn.Module):
     def __init__(self):
         super(Model,self).__init__()
         self.OcGCN = OcGCN() # 计算图输出
+        # self.OcGCN = OCGCN_ngcn()
         self.subgraph_creator = SUBGRAPH() # 计算子图
         self.loss_score = Loss_score()
         # self.r_G_softmax = nn.Softmax(dim=1)
@@ -35,6 +37,7 @@ class Model(nn.Module):
         self.args = args
         img_id = data['batch_entry']['img_id']
         if args.VL_pretrain:
+        # if False:
             # 模型预训练
             data = data['batch_entry_3d']
             data['centroid'] = data['centroid'].to(self.device)

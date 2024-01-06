@@ -165,10 +165,13 @@ class Trainer(TrainerBase):
             # split_word = '<extra_id_99>'
             # split_id = self.tokenizer.encode(split_word, return_tensors="pt", add_special_tokens=False)
             for step_i, batch in enumerate(self.train_loader):
+                if step_i>10:
+                    break
                 time_0 = time.time()
-                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
+                # r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
+                r_G = None
                 #####################################################################################
-                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
+                # batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 time_1 = time.time()
 
                 if self.args.fp16 and _use_native_amp:
@@ -186,7 +189,8 @@ class Trainer(TrainerBase):
                         time_2 = time.time()
                         
 
-                loss = results['loss'] + score_loss
+                # loss = results['loss'] + score_loss
+                loss = results['loss']
 
                 if self.args.fp16 and _use_native_amp:
                     self.scaler.scale(loss).backward()
@@ -358,6 +362,8 @@ class Trainer(TrainerBase):
             if self.verbose:
                 pbar = tqdm(total=len(loader), ncols=120, desc="Prediction")
             for i, batch in enumerate(loader):
+                if i > 10:
+                    break
                 # if i != 9:
                 #     continue
                 r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
@@ -367,7 +373,7 @@ class Trainer(TrainerBase):
                 else:
                     results = self.model.test_step(batch, r_G,**gen_kwargs)
 
-                pred_ans = results['pred_ans'][0]
+                pred_ans = results['pred_ans']
                 if self.args.replace_rel:
                     rel_list = batch['batch_entry']['sub_rel_obj']
                     for i,result in enumerate(pred_ans):
@@ -410,9 +416,9 @@ class Trainer(TrainerBase):
             acc_dict = {}
             topk_score = evaluator.evaluate(target, answer)
             # topk_score = evaluator.evaluate(quesid2ans)
-            acc_dict['CIDEr'] = topk_score['CIDEr']
+            # acc_dict['CIDEr'] = topk_score['CIDEr']
 
-            return acc_dict
+            return topk_score
     
     def text_process(self, batch, text_prompt):
         B = batch['vis_feats'].shape[0]
@@ -557,16 +563,18 @@ if __name__ == "__main__":
     args.backbone = 'VL-T5/t5-base'
     args.load = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/pretrain/VLT5/BEST'
     # args.backbone = 'VL-T5/bart-base'
-    # args.load = 'VL-T5/snap/pretrain/VLBart/Epoch30'
+    args.load = 'VL-T5/snap/pretrain/VLT5/Epoch30'
     args.output = '/home/zhangjx/All_model/genration_scene/3DVSD/VL-T5/snap/VSD_3D/final/vsd2/VLT5'
     # args.load = None
     args.num_beams = 5
     args.batch_size = 1
     args.valid_batch_size = 1
-    args.local_rank = 1
+    args.local_rank = 0
     args.max_text_length = 40
-    args.test_only = True
+    args.test_only = False
     args.data = 'VSDv2'
+
+    args.VL_pretrain = True # 控制对视觉语言模型进行预训练
     # args.replace_rel = True
     # args.vsd_pretrain = True
     ##############################################
