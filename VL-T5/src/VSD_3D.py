@@ -172,9 +172,7 @@ class Trainer(TrainerBase):
             # split_id = self.tokenizer.encode(split_word, return_tensors="pt", add_special_tokens=False)
             for step_i, batch in enumerate(self.train_loader):
                 # time_0 = time.time()
-                # r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
-                score_loss=torch.tensor(0)
-                r_G=None
+                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
                 #####################################################################################
                 if args.use_prefix:
                     pass
@@ -195,8 +193,8 @@ class Trainer(TrainerBase):
                         results = self.model.train_step(batch, r_G)
                         # time_2 = time.time()
                         
-                loss = results['loss']
-                # loss = 0.1 * results['loss'] + 0.9 * score_loss
+                # loss = results['loss']
+                loss = 0.1 * results['loss'] + 0.9 * score_loss
                 # loss = 0.1 * results['loss']
 
                 if self.args.fp16 and _use_native_amp:

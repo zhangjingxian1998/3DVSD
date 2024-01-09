@@ -276,7 +276,7 @@ class Model(nn.Module):
 
         A = A * obj_conf_V * obj_conf_H # 置信度筛选
         A = A * eye_reverse             # 抛弃自身连边
-        # A[:,0,1], A[:,1,0]= 1, 1 # 确保sub和obj之间存在关系
+        A[:,0,1], A[:,1,0]= 1, 1 # 确保sub和obj之间存在关系
 
         return A
     def extra_center(self, data, subgraph, flag):

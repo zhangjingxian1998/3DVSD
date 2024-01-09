@@ -132,8 +132,8 @@ class Trainer(TrainerBase):
         if self.verbose:
             print(f'It took {time() - start:.1f}s')
 
-        self.split_word = '<extra_id_99>'
-        self.split_id = self.tokenizer.encode(self.split_word, return_tensors="pt", add_special_tokens=False)
+        # self.split_word = '<extra_id_99>'
+        # self.split_id = self.tokenizer.encode(self.split_word, return_tensors="pt", add_special_tokens=False)
 
 
     def train(self):

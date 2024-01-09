@@ -162,6 +162,7 @@ class VSD_3D_FineTuneDataset(Dataset):
 
         if self.args.max_n_boxes == 36:
             self.source_to_h5 = dataset_dir.joinpath('vsd_3d_boxes38.h5')
+            # self.source_to_h5 = dataset_dir.joinpath('vsd3d_38.h5')
             if isinstance(self.source_to_h5, Path):
                 self.source_to_h5 = h5py.File(self.source_to_h5, 'r')
         

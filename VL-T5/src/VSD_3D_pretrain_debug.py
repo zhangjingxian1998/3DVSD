@@ -355,12 +355,12 @@ class Trainer(TrainerBase):
                 pbar = tqdm(total=len(loader), ncols=120, desc="Prediction")
             for i, batch in enumerate(loader):
                 r_G = None
-                direction_list = self.vsd_3d_encoder(self.args, batch)
-                batch['batch_entry']['input_ids'] = self.text_process(batch, self.split_word, self.split_id, direction_list)
+                text_prompt = self.vsd_3d_encoder(self.args, batch)
+                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
-                    results = self.model.module.test_step(batch, r_G)
+                    results = self.model.module.test_step(batch, r_G, **gen_kwargs)
                 else:
-                    results = self.model.test_step(batch, r_G)
+                    results = self.model.test_step(batch, r_G, **gen_kwargs)
 
                 pred_ans = results['pred_ans']
                 # ques_ids = batch['question_ids']
@@ -396,13 +396,13 @@ class Trainer(TrainerBase):
 
     def evaluate(self, loader, dump_path=None):
         # quesid2ans = self.predict(loader, dump_path)
-        traget, answer = self.predict(loader, dump_path)
+        target, answer = self.predict(loader, dump_path)
 
         if self.verbose:
             evaluator = loader.evaluator
             # acc_dict = evaluator.evaluate_raw(quesid2ans)
             acc_dict = {}
-            topk_score = evaluator.evaluate(traget, answer)
+            topk_score = evaluator.evaluate(target, answer)
             # topk_score = evaluator.evaluate(quesid2ans)
             acc_dict['CIDEr'] = topk_score['CIDEr']
 

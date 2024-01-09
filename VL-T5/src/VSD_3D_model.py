@@ -182,7 +182,7 @@ class VLT53DVSD(VLT5):
                 # force_words_ids=force_words_ids,
                 vis_inputs=(vis_feats, vis_pos),
                 # prefix_allowed_tokens_fn=prefix_allowed_tokens_fn_11,
-                num_return_sequences=num_beams,
+                # num_return_sequences=num_beams,
                 **kwargs
             )
             generated_sents = self.tokenizer.batch_decode(output, skip_special_tokens=True)

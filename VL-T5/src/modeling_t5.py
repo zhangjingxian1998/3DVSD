@@ -276,7 +276,7 @@ class JointEncoder(T5Stack):
                     encoder_hidden_states=None,
                     encoder_attention_mask=None,
                     encoder_decoder_position_bias=None,
-                    head_mask=head_mask[i],
+                    layer_head_mask=head_mask[i],
                     past_key_value=past_key_value,
                     use_cache=True,
                     output_attentions=output_attentions,
