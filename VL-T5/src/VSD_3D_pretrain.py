@@ -22,7 +22,7 @@ import numpy as np
 from param import parse_args
 
 from VSD_3D_data import get_loader
-from utils import LossMeter, set_global_logging_level
+from utils import LossMeter, set_global_logging_level, generate_tokens
 import dist_utils
 # import wandb
 from Total3DUnderstanding.net_utils.utils import load_model, CheckpointIO
@@ -74,6 +74,7 @@ class Trainer(TrainerBase):
 
         config = self.create_config()
         self.tokenizer = self.create_tokenizer()
+        self.tokenizer.add_tokens(generate_tokens())
         if 'bart' in self.args.tokenizer:
             num_added_toks = 0
             if config.use_vis_order_embedding:

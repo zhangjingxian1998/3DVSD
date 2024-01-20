@@ -90,7 +90,7 @@ class VLT53DVSD(VLT5):
         batch = batch['batch_entry']
         input_ids = batch['input_ids'].to(device)
         vis_pos = batch['boxes'].to(device)
-        num_beams = kwargs['num_beams']
+        # num_beams = kwargs['num_beams']
 
         result = {}
         if self.config.classifier:
@@ -183,6 +183,8 @@ class VLT53DVSD(VLT5):
                 vis_inputs=(vis_feats, vis_pos),
                 # prefix_allowed_tokens_fn=prefix_allowed_tokens_fn_11,
                 # num_return_sequences=num_beams,
+                # output_scores=True,
+                # return_dict_in_generate=True,
                 **kwargs
             )
             generated_sents = self.tokenizer.batch_decode(output, skip_special_tokens=True)

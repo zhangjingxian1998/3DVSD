@@ -1,5 +1,6 @@
-# 正式训练时的输入模板变化, 还要额外训练一个3DVSD的encoder, 模型需要学习的提示词增加一个<TGT>
-# 与之对比的输出是描述性语句
+# pretrain的目的应该是让模型去学习一下 <OBJ> <REL> 这两个词的含义, 使用的图片特征是total3D中的resnet层输出
+# 输入提示模板 <OBJ> sub_name <REL> gt_rel or other 同义词 <OBJ> obj_name
+# 与之对比的输出 sub_name,rel,obj_name
 import sys
 import os
 current_path = ('/').join((sys.path[0].split('/'))[:-3])
@@ -16,38 +17,25 @@ from packaging import version
 from tqdm import tqdm
 import torch
 import logging
+import numpy as np
 
 from param import parse_args
 
 from VSD_3D_data import get_loader
 from utils import LossMeter, set_global_logging_level, generate_tokens
+import dist_utils
+# import wandb
 from Total3DUnderstanding.net_utils.utils import load_model, CheckpointIO
 from Total3DUnderstanding.utils.param import parse_args as total3d_parse_args
 from Total3DUnderstanding.configs.config_utils import CONFIG
 from vsd_3d.models import Model
 import time
-from pprint import pformat
-import re
-from torch.utils.tensorboard import SummaryWriter
-logger = SummaryWriter(log_dir='./log')
-step_count = 0
+# set_global_logging_level(logging.ERROR, ["transformers"])
 proj_dir = Path(__file__).resolve().parent.parent
 
 _use_native_amp = False
 _use_apex = False
-predict_list = ["to the left of", "to the right of", "in front of","next to", "above","behind","under","on","in"]
-dudu = []
-predicate_dict = {
-    '<extra_id_27>':'on',
-    '<extra_id_28>':"to the left of",
-    '<extra_id_29>':"under",
-    '<extra_id_30>':"behind",
-    '<extra_id_31>':"to the right of",
-    '<extra_id_32>':"in",
-    '<extra_id_33>':"next to",
-    '<extra_id_34>':"in front of",
-    '<extra_id_35>':"above"
-}
+
 # Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
 if version.parse(torch.__version__) < version.parse("1.6"):
     from transormers.file_utils import is_apex_available
@@ -85,7 +73,7 @@ class Trainer(TrainerBase):
 
         config = self.create_config()
         self.tokenizer = self.create_tokenizer()
-        # self.tokenizer.add_tokens(generate_tokens())
+        self.tokenizer.add_tokens(generate_tokens())
         if 'bart' in self.args.tokenizer:
             num_added_toks = 0
             if config.use_vis_order_embedding:
@@ -97,6 +85,7 @@ class Trainer(TrainerBase):
                 additional_special_tokens.append('<SEP>')
                 special_tokens_dict = {'additional_special_tokens': additional_special_tokens}
                 num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
+
                 config.default_obj_order_ids = self.tokenizer.convert_tokens_to_ids([f'<vis_extra_id_{i}>' for i in range(100)])
 
         self.model = self.create_model(model_class, config, **model_kwargs)
@@ -124,7 +113,7 @@ class Trainer(TrainerBase):
             from time import time
             start = time()
         self.model = self.model.to(args.gpu)
-        # self.vsd_3d_encoder = self.vsd_3d_encoder.to(args.gpu)
+
         # Optimizer
         if train:
             self.optim, self.lr_scheduler = self.create_optimizer_and_scheduler()
@@ -140,24 +129,19 @@ class Trainer(TrainerBase):
                 self.model = DDP(self.model, device_ids=[args.gpu],
                                  find_unused_parameters=True
                                  )
-                # self.vsd_3d_encoder = DDP(self.vsd_3d_encoder, device_ids=[args.gpu],
-                #                  find_unused_parameters=True
-                #                  )
         if self.verbose:
             print(f'It took {time() - start:.1f}s')
 
+        # self.split_word = '<extra_id_99>'
+        # self.split_id = self.tokenizer.encode(self.split_word, return_tensors="pt", add_special_tokens=False)
+
 
     def train(self):
-        step_count = 0
+        r_G = None # r_G在预训练过程无用，设置为None
         device = next(self.model.parameters()).device
         self.vsd_3d_encoder = self.vsd_3d_encoder.to(device)
-        # if self.args.vsd_pretrain:
-        #     for param in self.model.named_parameters():
-        #         param[1].requires_grad = False
         if self.verbose:
             loss_meter = LossMeter()
-            loss_vl = LossMeter()
-            loss_vsd = LossMeter()
             best_valid = 0.
             best_epoch = 0
 
@@ -178,37 +162,39 @@ class Trainer(TrainerBase):
                 'loss': 0.,
 
             }
-
             quesid2ans = {}
-            # time_start = time.time()
-            # split_word = '<extra_id_99>'
-            # split_id = self.tokenizer.encode(split_word, return_tensors="pt", add_special_tokens=False)
+            time_start = time.time()
+            
             for step_i, batch in enumerate(self.train_loader):
-                # time_0 = time.time()
-                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
-                #####################################################################################
-                if args.use_prefix:
-                    pass
-                else:
-                    batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
-                # time_1 = time.time()
+                # break
+                time_0 = time.time()
+                text_prompt = self.vsd_3d_encoder(self.args, batch)
+                # text_promt作为视觉语言模型的输入
+                time_1 = time.time()
+                # 文本处理 TODO 文本的提示应该是部队的 <OBJ> <TGT> 在编码中是没有意义的，或许应该是先添加进来，然后进行预训练，把这两个提示词给finetune一下
+                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
+                # 输出的vsd_3d_result应该包括： 
+                # r_G: 用作后续VL模型中的decoder做cross_attention
+                # 子图的额外类类名，用作填进提示词中 # 如果没有额外的类应该怎么办
+                # 预测出来的关系，用于填进提示词中
+                # 到此，提示词填充完毕，应将提示词tolist(), 用' '拼接，转为相应的input_ids
+                # 还有边得分的损失
                 if self.args.fp16 and _use_native_amp:
                     with autocast():
                         if self.args.distributed:
-                            results = self.model.module.train_step(batch,r_G)
+                            results = self.model.module.train_step(batch, r_G)
                         else:
-                            results = self.model.train_step(batch,r_G)
+                            results = self.model.train_step(batch, r_G)
                 else:
                     if self.args.distributed:
-                        results = self.model.module.train_step(batch,r_G)
-                        # time_2 = time.time()
+                        results = self.model.module.train_step(batch, r_G)
+                        time_2 = time.time()
                     else:
                         results = self.model.train_step(batch, r_G)
-                        # time_2 = time.time()
+                        time_2 = time.time()
                         
-                # loss = results['loss']
-                loss = 0.1 * results['loss'] + 0.9 * score_loss
-                # loss = 0.1 * results['loss']
+
+                loss = results['loss']
 
                 if self.args.fp16 and _use_native_amp:
                     self.scaler.scale(loss).backward()
@@ -263,27 +249,18 @@ class Trainer(TrainerBase):
 
                 if self.verbose:
                     loss_meter.update(loss.item())
-                    loss_vl.update(results['loss'].item())
-                    loss_vsd.update(score_loss.item())
                     desc_str = f'Epoch {epoch} | LR {lr:.6f}'
                     desc_str += f' | Loss {loss_meter.val:4f}'
 
-                    desc_str += f' | Loss_VL {loss_vl.val:4f}'
-                    desc_str += f' | Loss_VSD {loss_vsd.val:4f}'
-
                     pbar.set_description(desc_str)
                     pbar.update(1)
-                    logger.add_scalar('total_loss', loss.item(), step_count)
-                    logger.add_scalar('loss_vl', results['loss'].item(), step_count)
-                    logger.add_scalar('loss_vsd', score_loss.item(), step_count)
-                    step_count = step_count + 1
 
                 if self.args.distributed:
                     dist.barrier()
                 # print('加载数据集耗时:',time_0-time_start)
                 # print('vsd3d网络处理耗时:',time_1-time_0)
                 # print('VL网络处理耗时:',time_2-time_1)
-                # time_start = time.time()
+                time_start = time.time()
                 # print('反向传播耗时:',time_start-time_0)
                 
 
@@ -291,12 +268,9 @@ class Trainer(TrainerBase):
                 pbar.close()
 
             # Validation
-            with torch.no_grad():
-                score_dict = self.evaluate(self.val_loader)
-            
-
+            score_dict = self.evaluate(self.val_loader)
+            # score_dict = self.evaluate(self.train_loader)
             if self.verbose:
-                
                 valid_score = score_dict['CIDEr'] * 100.
                 if valid_score > best_valid or epoch == 0:
                     best_valid = valid_score
@@ -304,10 +278,8 @@ class Trainer(TrainerBase):
                     self.save("BEST")
 
                 log_str = ''
-                log_str += pformat(score_dict)
                 log_str += "\nEpoch %d: Valid Raw %0.2f" % (epoch, valid_score)
                 log_str += "\nEpoch %d: Best Raw %0.2f\n" % (best_epoch, best_valid)
-            
 
                 # wandb_log_dict = {}
                 # wandb_log_dict['Train/Loss'] = epoch_results['loss'] / len(self.train_loader)
@@ -324,6 +296,7 @@ class Trainer(TrainerBase):
 
                 # wandb.log(wandb_log_dict, step=epoch)
                 print(log_str)
+
             if self.args.distributed:
                 dist.barrier()
 
@@ -333,18 +306,13 @@ class Trainer(TrainerBase):
         # Test Set
         best_path = os.path.join(self.args.output, 'BEST')
         self.load(best_path)
-        with torch.no_grad():
-            target, answer = self.predict(self.test_loader)
+
+        target, answer = self.predict(self.test_loader)
 
         if self.verbose:
             evaluator = self.test_loader.evaluator
             score_dict = evaluator.evaluate(target, answer)
-            log_str = ''
-            log_str += pformat(score_dict)
-            test_score = score_dict['CIDEr'] * 100.
-            
-            log_str += "\nTest %0.2f" % (test_score)
-            print(log_str)
+
             # evaluator.dump_result(quesid2ans)
 
             # acc_dict_all = evaluator.evaluate_raw(quesid2ans)
@@ -380,6 +348,7 @@ class Trainer(TrainerBase):
     def predict(self, loader, dump_path=None):
         self.model.eval()
         with torch.no_grad():
+
             gen_kwargs = {}
             gen_kwargs['num_beams'] = self.args.num_beams
             gen_kwargs['max_length'] = self.args.gen_max_length
@@ -387,58 +356,20 @@ class Trainer(TrainerBase):
             quesid2ans = {}
             target = []
             answer = []
-            dudu = []
-            rel_gt = []
             if self.verbose:
                 pbar = tqdm(total=len(loader), ncols=120, desc="Prediction")
             for i, batch in enumerate(loader):
-                r_G, text_prompt, score_loss = self.vsd_3d_encoder(self.args, batch)
-                if self.args.use_prefix:
-                    pass
-                else:
-                    batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
+                r_G = None
+                text_prompt = self.vsd_3d_encoder(self.args, batch)
+                batch['batch_entry']['input_ids'] = self.text_process(batch, text_prompt)
                 if self.args.distributed:
-                    results = self.model.module.test_step(batch, r_G, **gen_kwargs)
+                    results = self.model.module.test_step(batch, r_G,**gen_kwargs)
                 else:
-                    results = self.model.test_step(batch, r_G, **gen_kwargs)
+                    results = self.model.test_step(batch, r_G,**gen_kwargs)
 
                 pred_ans = results['pred_ans']
-                if not self.args.rep_extra_id:
-                    for key in predicate_dict.keys():
-                        pred_ans[0] = re.sub(f'{key}',predicate_dict[key],pred_ans[0])
-                if self.args.get_rel:
-                    rel_list = batch['batch_entry']['sub_rel_obj']
-                    for j,result in enumerate(pred_ans):
-                        flag = True
-                        rel_gt.append(rel_list[j][1])
-                        for rel in predict_list:
-                            if rel in result:
-                                dudu.append(rel)
-                                flag = False
-                                break
-                        if flag:
-                            dudu.append('None')
-                if self.args.replace_rel:
-                    rel_list = batch['batch_entry']['sub_rel_obj']
-                    for j,result in enumerate(pred_ans):
-                        rel_gt = rel_list[j][1]
-                        for rel in predict_list:
-                            if rel in result:
-                                pred_ans[j] = result.replace(rel,rel_gt)
-                                break
-                if self.args.visualize:
-                    for i,result in enumerate(pred_ans):
-                        name = batch['batch_entry']['img_id'][i]
-                        true = batch['batch_entry']['sentences'][i]
-                        with open(f'/home/zhangjx/All_model/genration_scene/3DVSD/save_img_vsd2/{name}.txt', 'w') as t:
-                            t.write('The model output: ')
-                            t.write(result)
-                            t.write('\n')
-                            t.write('The true is: ')
-                            t.write(true)
-                            t.close()
                 # ques_ids = batch['question_ids']
-                ques_ids = batch['batch_entry']['sentences']
+                ques_ids = batch['batch_entry']['targets']
 
                 for qid, ans in zip(ques_ids, pred_ans):
                     target.append(qid)
@@ -450,12 +381,7 @@ class Trainer(TrainerBase):
 
             if self.verbose:
                 pbar.close()
-            if self.args.get_rel:
-                import numpy as np
-                dudu = np.array(dudu,dtype='object')
-                rel_gt = np.array(rel_gt,dtype='object')
-                np.save('rel_save/vl/vl_rel.npy',dudu)
-                np.save('rel_save/gt/gt_rel.npy',rel_gt)
+
         if self.args.distributed:
             dist.barrier()
 
@@ -475,8 +401,7 @@ class Trainer(TrainerBase):
 
     def evaluate(self, loader, dump_path=None):
         # quesid2ans = self.predict(loader, dump_path)
-        with torch.no_grad():
-            target, answer = self.predict(loader, dump_path)
+        target, answer = self.predict(loader, dump_path)
 
         if self.verbose:
             evaluator = loader.evaluator
@@ -484,10 +409,9 @@ class Trainer(TrainerBase):
             acc_dict = {}
             topk_score = evaluator.evaluate(target, answer)
             # topk_score = evaluator.evaluate(quesid2ans)
-            # acc_dict['CIDEr'] = topk_score['CIDEr']
+            acc_dict['CIDEr'] = topk_score['CIDEr']
 
-            return topk_score
-    
+            return acc_dict
     def text_process(self, batch, text_prompt):
         B = batch['vis_feats'].shape[0]
         input_ids = []
@@ -503,40 +427,17 @@ class Trainer(TrainerBase):
         for i in range(B):
             input_ids_tensor[i,:length[i]] = input_ids[i]
         return input_ids_tensor
-    
-    def test(self):
-        device = next(self.model.parameters()).device
-        self.vsd_3d_encoder = self.vsd_3d_encoder.to(device)
-        best_path = os.path.join(self.args.output, 'BEST')
-        self.load(best_path)
 
-        target, answer = self.predict(self.test_loader)
-        # target, answer = self.predict(self.train_loader)
-        # target, answer = self.predict(self.val_loader)
-
-        if self.verbose:
-            evaluator = self.test_loader.evaluator
-            score_dict = evaluator.evaluate(target, answer)
-            log_str = ''
-            log_str += pformat(score_dict)
-            test_score = score_dict['CIDEr'] * 100.
-            log_str += "\nTest %0.2f" % (test_score)
-            print(log_str)
-    # def text_process_(self, batch,split_word, split_id, ):
+    # def text_process(self, batch,split_word, split_id, direction_list):
     #     B = batch['vis_feats'].shape[0]
+    #     direction_list = direction_list.reshape(B,1)
     #     arange = np.arange(B)
     #     input_text = batch['batch_entry']['input_text']
 
-    #     replace_middle = np.array(self.train_loader.dataset.prompt_template_replace_middle_id)
-    #     replace_rel = np.array(self.train_loader.dataset.prompt_template_replace_rel_id)
-    #     replace_middle = np.repeat(replace_middle.reshape(1,-1), B, axis=0)
+    #     replace_rel = np.array(self.train_loader.dataset.prompt_template_VL_pretrain_replace_rel_id)
     #     replace_rel = np.repeat(replace_rel.reshape(1,-1), B, axis=0)
 
-    #     input_text[arange,replace_middle[:,0]]=subgraph_class
-    #     input_text[arange,replace_middle[:,1]]=subgraph_class
-
-    #     input_text[arange,replace_rel[:,0]] = direction_list[:,0]
-    #     input_text[arange,replace_rel[:,1]] = direction_list[:,1]
+    #     input_text[arange,replace_rel[:,0]] = direction_list[:, 0]
     #     extra_id_split = np.repeat(np.array([[split_word]]).astype(np.object_),B,axis=0)
     #     input_text = np.concatenate([input_text, extra_id_split], axis=-1)
     #     input_text = input_text.reshape(-1).tolist()
@@ -551,7 +452,7 @@ class Trainer(TrainerBase):
     #         else:
     #             input_ids.append(input_id[index[i-1]+1:index[i]])
     #     input_ids.append(input_id[index[-2]+1:-1])
-    #     # TODO 需要给其按照最大长度补0
+    #     # 需要给其按照最大长度补0
     #     S_W_L = 0
     #     length = []
     #     for input_id in input_ids:
@@ -565,18 +466,14 @@ class Trainer(TrainerBase):
 
 def main_worker(gpu, args, total3d_model, vsd_3d_encoder):
     # GPU is assigned
+    
     args.gpu = gpu
     args.rank = gpu
     print(f'Process Launching at GPU {gpu}')
 
     if args.distributed:
-        # os.environ['RANK'] = '0'
-        # os.environ['WORLD_SIZE'] = '1'
-        # os.environ['MASTER_ADDR'] = 'localhost'
-        # os.environ['MASTER_PORT'] = '12346'
         torch.cuda.set_device(args.gpu)
         dist.init_process_group(backend='nccl')
-
 
     print(f'Building train loader at GPU {gpu}')
     train_loader = get_loader(
@@ -621,22 +518,16 @@ def main_worker(gpu, args, total3d_model, vsd_3d_encoder):
             topk=args.valid_topk,
         )
         trainer.submit_test_loader = submit_test_loader
-    if args.test_only:
-        trainer.test()
-    else:
-        trainer.train()
 
-    
+    trainer.train()
 
 if __name__ == "__main__":
     cudnn.benchmark = True
     args = parse_args()
     ngpus_per_node = torch.cuda.device_count()
-    # torch.autograd.set_detect_anomaly(True)
-    args.world_size = ngpus_per_node
 
     args.predict_custom = False # 如果是开放世界测试，需要引入total3d和fastercnn
-    # args.VL_pretrain = False # 控制对视觉语言模型进行预训练
+    args.VL_pretrain = True # 控制对视觉语言模型进行预训练
     if args.predict_custom:
         # build faster rcnn
 

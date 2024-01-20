@@ -136,3 +136,27 @@ def get_iou(anchors, gt_boxes):
 def xywh_to_xyxy(boxes):
     """Convert [x y w h] box format to [x1 y1 x2 y2] format."""
     return np.hstack((boxes[:, 0:2], boxes[:, 0:2] + boxes[:, 2:4] - 1))
+
+def generate_tokens():
+    extra_ids = 100
+    vis_extra_ids = 100
+    additional_special_tokens = None
+    if extra_ids > 0 and additional_special_tokens is None:
+            additional_special_tokens = ["<extra_id_{}>".format(i) for i in range(extra_ids)]
+    elif extra_ids > 0 and additional_special_tokens is not None:
+        # Check that we have the right number of extra_id special tokens
+        extra_tokens = len(set(filter(lambda x: bool("extra_id" in x), additional_special_tokens)))
+        if extra_tokens != extra_ids:
+            raise ValueError(
+                f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are provided to T5Tokenizer. "
+                "In this case the additional_special_tokens must include the extra_ids tokens"
+            )
+
+    if vis_extra_ids > 0:
+        additional_special_tokens.extend(["<vis_extra_id_{}>".format(i) for i in range(vis_extra_ids)])
+
+    additional_special_tokens.extend(["<TGT>"])
+    additional_special_tokens.extend(["<OBJ>"])
+    additional_special_tokens.extend(["<REL>"])
+    additional_special_tokens.extend(["<SEP>"])
+    return additional_special_tokens

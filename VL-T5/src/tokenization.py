@@ -6,6 +6,7 @@ import sentencepiece as spm
 # I create another class VLT5Tokenizer extending it to add <vis_extra_id_{}>
 
 class VLT5Tokenizer(T5Tokenizer):
+#class VLT5Tokenizer(T5Tokenizer, PreTrainedTokenizer):
 
     # vocab_files_names = VOCAB_FILES_NAMES
     # pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -38,10 +39,10 @@ class VLT5Tokenizer(T5Tokenizer):
         if vis_extra_ids > 0:
             additional_special_tokens.extend(["<vis_extra_id_{}>".format(i) for i in range(vis_extra_ids)])
 
-        # additional_special_tokens.extend(["<TGT>"])
-        # additional_special_tokens.extend(["<OBJ>"])
-        # additional_special_tokens.extend(["<REL>"])
-        # additional_special_tokens.extend(["[SEP]"])
+        additional_special_tokens.extend(["<TGT>"])
+        additional_special_tokens.extend(["<OBJ>"])
+        additional_special_tokens.extend(["<REL>"])
+        additional_special_tokens.extend(["[SEP]"])
 
         PreTrainedTokenizer.__init__(
             self,
@@ -126,7 +127,6 @@ class VLT5Converter(SpmConverter):
 
 def convert_slow_vlt5tokenizer(vlt5tokenizer):
     return VLT5Converter(vlt5tokenizer).converted()
-
 
 class VLT5TokenizerFast(T5TokenizerFast):
 

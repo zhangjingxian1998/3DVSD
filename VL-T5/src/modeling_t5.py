@@ -219,8 +219,7 @@ class JointEncoder(T5Stack):
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(
             attention_mask,
-            (B, L+V_L),
-            device=attention_mask.device)
+            (B, L+V_L))
 
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:

@@ -57,7 +57,6 @@ synonyms = {
 class VSD_3D_FineTuneDataset(Dataset):
     def __init__(self, split='train', raw_dataset=None, rank=-1, topk=-1, verbose=True, args=None, mode='train'):
         super().__init__()
-
         self.raw_dataset = raw_dataset
         self.topk = topk
         self.verbose = verbose
@@ -95,7 +94,6 @@ class VSD_3D_FineTuneDataset(Dataset):
             
             special_tokens_dict = {'additional_special_tokens': additional_special_tokens}
             num_added_toks = self.tokenizer.add_special_tokens(special_tokens_dict)
-
         if self.args.oscar_tags:
             # Load VG Classes
             vg_classes = []
