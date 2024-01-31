@@ -281,7 +281,7 @@ if __name__ == '__main__':
             nyu40class_ids = [int(evaluate_bdb['classid']) for evaluate_bdb in bdb3D_out_form_cpu]
             save_path = cfg.config['demo_path'].replace('inputs', 'outputs')
             # save_path = os.path.join('/home/zhangjx/All_model/Total3DUnderstanding/save_mat_path',img_name)
-            save_path = os.path.join('/home/zhangjx/All_model/Total3DUnderstanding/save_mat_gt_path',img_name)
+            save_path = os.path.join('./Total3DUnderstanding/save_mat_gt_path',img_name)
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             # save layout
