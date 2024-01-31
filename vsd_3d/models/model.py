@@ -88,7 +88,8 @@ class Model(nn.Module):
             num_node = torch.sum((num_node > 0).float(),dim=-1) # 计算节点数量
             time_1 = time.time()
             # step2 计算图输出
-            s_v, s_e = self.OcGCN(data,vis_feats, adjacency_matrix)
+            # s_v, s_e = self.OcGCN(data,vis_feats, adjacency_matrix)
+            s_v, s_e = self.OcGCN.preprocess(data, vis_feats, adjacency_matrix)
             time_2 = time.time()
             # step3 子图选择，边得分 # TODO 边得分需要计算损失 如果根据要求没有找到合适的子图，没有子图连边，应该是只输入sub和obj吗，还是强制至少有一个子图 子图有四种形式，目前只考虑了三种，并且第一种没有处理
             # 子图1, 只有两个target目标存在连线 # 这种情况得到提示词用一个的吧
@@ -276,7 +277,7 @@ class Model(nn.Module):
 
         A = A * obj_conf_V * obj_conf_H # 置信度筛选
         A = A * eye_reverse             # 抛弃自身连边
-        A[:,0,1], A[:,1,0]= 1, 1 # 确保sub和obj之间存在关系
+        # A[:,0,1], A[:,1,0]= 1, 1 # 确保sub和obj之间存在关系
 
         return A
     def extra_center(self, data, subgraph, flag):
