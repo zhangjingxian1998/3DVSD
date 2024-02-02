@@ -22,6 +22,10 @@ python Total3DUnderstanding/extral_3d.py            # 调用total3d框架，提�
 python Total3DUnderstanding/generate_datasets.py    # 读取save_mat_gt_path文件中的3D文件，生成新的.h5文件
 ```
 
+# 具体步骤
+函数的入口在VSD_3D.py或者VSD_3D_debug.py的main函数中
+训练过程构建分词器tokenizer，新增特殊token\<TGT>\<REL>\<SEP>\<OBJ>，预训练过程中由于新增了token，加载权重时需要手动对词向量部分的权重手动赋值。然后构建数据集，优化器，模型。训练过程调用trainer.train()，包含迭代训练，训练中的验证以及训练结束后的测试过程。单独使用测试过程需指定超参--test_only，则会调用trainer.test()。
+在非开放世界测试下，所有数据已经经过Total3D模型处理，所以输入数据首先送入3DVSD模型进行计算，计算结果包含三维信息与物体关系的隐式向量r_G，以及用于视觉语言模型的提示词。接下来将结果输入视觉语言模型中做最终运算。
 # 训练
 ```
 # 对视觉语言模型的预训练，使用预训练权重为对应视觉语言模型的权重文件。输入主语和宾语对应三维框坐标，经过三维空间位置关系判断，得出'<TGT> sub <REL> rel_p <TGT> obj'的视觉语言模型的语言部分输入，监督信号为'sub,rel_t,obj'，可以认为此预训练为训练标志符<TGT>与<REL>以及建立三维空间关系rel_p与二维空间关系rel_t之间的一个映射。
