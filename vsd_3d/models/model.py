@@ -88,7 +88,9 @@ class Model(nn.Module):
             num_node = torch.sum((num_node > 0).float(),dim=-1) # 计算节点数量
             time_1 = time.time()
             # step2 计算图输出
+            # 如果使用gcn
             # s_v, s_e = self.OcGCN(data,vis_feats, adjacency_matrix)
+            # 如果不使用gcn
             s_v, s_e = self.OcGCN.preprocess(data,vis_feats, adjacency_matrix)
             time_2 = time.time()
             # step3 子图选择，边得分 # TODO 边得分需要计算损失 如果根据要求没有找到合适的子图，没有子图连边，应该是只输入sub和obj吗，还是强制至少有一个子图 子图有四种形式，目前只考虑了三种，并且第一种没有处理

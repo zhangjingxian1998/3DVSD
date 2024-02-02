@@ -24,7 +24,10 @@ python Total3DUnderstanding/generate_datasets.py    # 读取save_mat_gt_path文�
 
 # 训练
 ```
+# 对视觉语言模型的预训练，使用预训练权重为对应视觉语言模型的权重文件。输入主语和宾语对应三维框坐标，经过三维空间位置关系判断，得出'<TGT> sub <REL> rel_p <TGT> obj'的视觉语言模型的语言部分输入，监督信号为'sub,rel_t,obj'，可以认为此预训练为训练标志符<TGT>与<REL>以及建立三维空间关系rel_p与二维空间关系rel_t之间的一个映射。
 bash VL-T5/scripts/VSD_3D_pretrain_VLT5.sh
+
+# 全局训练，使用预训练权重为上一步的预训练权重
 bash VL-T5/scripts/VSD_3D_VLT5_vsd2.sh
 bash VL-T5/scripts/VSD_3D_VLT5_vsd1.sh
 # 生成的权重文件会保存在VL-T5/snap/VSD_3D中对应.sh脚本的name文件下
